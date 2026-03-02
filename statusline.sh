@@ -106,8 +106,12 @@ out+="${blue}${model_name}${reset}"
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 if [ -n "$cwd" ]; then
     display_dir="${cwd##*/}"
+    git_branch=$(git -C "${cwd}" rev-parse --abbrev-ref HEAD 2>/dev/null)
     out+=" ${dim}|${reset} "
     out+="${cyan}${display_dir}${reset}"
+    if [ -n "$git_branch" ]; then
+        out+="${dim}@${reset}${green}${git_branch}${reset}"
+    fi
 fi
 
 out+=" ${dim}|${reset} "
