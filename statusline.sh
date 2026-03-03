@@ -314,6 +314,8 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         extra_pct=$(echo "$usage_data" | jq -r '.extra_usage.utilization // 0' | awk '{printf "%.0f", $1}')
         extra_used=$(echo "$usage_data" | jq -r '.extra_usage.used_credits // 0' | awk '{printf "%.2f", $1/100}')
         extra_limit=$(echo "$usage_data" | jq -r '.extra_usage.monthly_limit // 0' | awk '{printf "%.2f", $1/100}')
+        extra_used="${extra_used:-0.00}"
+        extra_limit="${extra_limit:-0.00}"
         extra_bar=$(build_bar "$extra_pct" "$bar_width")
 
         out+="${sep}${white}extra${reset} ${extra_bar} ${cyan}\$${extra_used}/\$${extra_limit}${reset}"
