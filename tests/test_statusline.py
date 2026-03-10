@@ -77,7 +77,7 @@ class StatusLineTests(unittest.TestCase):
     def _write_usage(self, payload) -> None:
         self.usage_cache.write_text(json.dumps(payload))
 
-    def _run_shell(self, budget=None, usage=True, cwd=None):
+    def _run_shell(self, budget=None, usage=True, cwd=None, raw=False, extra_env=None):
         env = os.environ.copy()
         env["HOME"] = str(self.cache_home)
         env["TZ"] = "UTC"
@@ -86,6 +86,8 @@ class StatusLineTests(unittest.TestCase):
             env["CLAUDE_CODE_STATUSLINE_MAX_WIDTH"] = str(budget)
         else:
             env.pop("CLAUDE_CODE_STATUSLINE_MAX_WIDTH", None)
+        if extra_env:
+            env.update(extra_env)
 
         if usage is True:
             self._write_usage(SAMPLE_USAGE)
@@ -109,7 +111,7 @@ class StatusLineTests(unittest.TestCase):
             cwd=ROOT,
             check=True,
         )
-        return strip_ansi(result.stdout)
+        return result.stdout if raw else strip_ansi(result.stdout)
 
     def _run_pwsh(self, budget=None):
         runtime = shutil.which("pwsh") or shutil.which("powershell")
@@ -199,6 +201,18 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("5h 83% 2:00", pwsh_output)
         self.assertNotIn("extra ", pwsh_output)
         self.assertEqual(shell_output.split(" | ")[:4], pwsh_output.split(" | ")[:4])
+
+    def test_theme_preset_changes_ansi_palette_without_changing_plain_text(self):
+        default_raw = self._run_shell(budget=100, raw=True)
+        forest_raw = self._run_shell(
+            budget=100,
+            raw=True,
+            extra_env={"CLAUDE_CODE_STATUSLINE_THEME": "forest"},
+        )
+
+        self.assertIn("[38;2;77;166;255m", default_raw)
+        self.assertIn("[38;2;120;196;120m", forest_raw)
+        self.assertEqual(strip_ansi(default_raw), strip_ansi(forest_raw))
 
 
 if __name__ == "__main__":

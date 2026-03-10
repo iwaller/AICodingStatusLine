@@ -8,15 +8,31 @@ if (-not $input) {
 
 $esc = [char]0x1b
 
+$themeName = if ($env:CLAUDE_CODE_STATUSLINE_THEME) { $env:CLAUDE_CODE_STATUSLINE_THEME } else { "default" }
+
 # ANSI palette tuned for dim terminal chrome with one strong accent.
-$accent = "${esc}[38;2;77;166;255m"
-$teal   = "${esc}[38;2;77;175;176m"
-$branch = "${esc}[38;2;196;208;212m"
-$red    = "${esc}[38;2;255;85;85m"
-$orange = "${esc}[38;2;255;176;85m"
-$yellow = "${esc}[38;2;230;200;0m"
-$green  = "${esc}[38;2;0;160;0m"
-$white  = "${esc}[38;2;228;232;234m"
+switch ($themeName) {
+    "forest" {
+        $accent = "${esc}[38;2;120;196;120m"
+        $teal   = "${esc}[38;2;94;170;150m"
+        $branch = "${esc}[38;2;214;224;205m"
+        $red    = "${esc}[38;2;224;108;117m"
+        $orange = "${esc}[38;2;214;170;84m"
+        $yellow = "${esc}[38;2;198;183;101m"
+        $green  = "${esc}[38;2;120;196;120m"
+        $white  = "${esc}[38;2;234;238;228m"
+    }
+    default {
+        $accent = "${esc}[38;2;77;166;255m"
+        $teal   = "${esc}[38;2;77;175;176m"
+        $branch = "${esc}[38;2;196;208;212m"
+        $red    = "${esc}[38;2;255;85;85m"
+        $orange = "${esc}[38;2;255;176;85m"
+        $yellow = "${esc}[38;2;230;200;0m"
+        $green  = "${esc}[38;2;0;160;0m"
+        $white  = "${esc}[38;2;228;232;234m"
+    }
+}
 $dim    = "${esc}[2m"
 $reset  = "${esc}[0m"
 

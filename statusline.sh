@@ -9,15 +9,31 @@ if [ -z "$input" ]; then
     exit 0
 fi
 
+theme_name="${CLAUDE_CODE_STATUSLINE_THEME:-default}"
+
 # ANSI palette tuned for dim terminal chrome with one strong accent.
-accent='\033[38;2;77;166;255m'
-teal='\033[38;2;77;175;176m'
-branch='\033[38;2;196;208;212m'
-red='\033[38;2;255;85;85m'
-orange='\033[38;2;255;176;85m'
-yellow='\033[38;2;230;200;0m'
-green='\033[38;2;0;160;0m'
-white='\033[38;2;228;232;234m'
+case "$theme_name" in
+    forest)
+        accent='\033[38;2;120;196;120m'
+        teal='\033[38;2;94;170;150m'
+        branch='\033[38;2;214;224;205m'
+        red='\033[38;2;224;108;117m'
+        orange='\033[38;2;214;170;84m'
+        yellow='\033[38;2;198;183;101m'
+        green='\033[38;2;120;196;120m'
+        white='\033[38;2;234;238;228m'
+        ;;
+    *)
+        accent='\033[38;2;77;166;255m'
+        teal='\033[38;2;77;175;176m'
+        branch='\033[38;2;196;208;212m'
+        red='\033[38;2;255;85;85m'
+        orange='\033[38;2;255;176;85m'
+        yellow='\033[38;2;230;200;0m'
+        green='\033[38;2;0;160;0m'
+        white='\033[38;2;228;232;234m'
+        ;;
+esac
 dim='\033[2m'
 reset='\033[0m'
 

@@ -34,6 +34,12 @@ Example:
 CLAUDE_CODE_STATUSLINE_MAX_WIDTH=100 ~/.claude/statusline.sh
 ```
 
+You can also switch ANSI palettes with `CLAUDE_CODE_STATUSLINE_THEME`.
+
+```bash
+CLAUDE_CODE_STATUSLINE_THEME=forest ~/.claude/statusline.sh
+```
+
 ## Requirements
 
 ### macOS / Linux
