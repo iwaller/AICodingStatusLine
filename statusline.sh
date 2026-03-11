@@ -25,6 +25,28 @@ case "$bar_style_name" in
         bar_filled_char='■'
         bar_empty_char='□'
         ;;
+    blocks)
+        bar_filled_char='█'
+        bar_empty_char='░'
+        ;;
+    braille)
+        bar_filled_char='⣿'
+        bar_empty_char='⣀'
+        ;;
+    shades)
+        bar_filled_char='▓'
+        bar_empty_char='░'
+        ;;
+    diamonds)
+        bar_filled_char='◆'
+        bar_empty_char='◇'
+        ;;
+    custom:*)
+        bar_filled_char="$(printf '%s' "$bar_style_name" | cut -d: -f2)"
+        bar_empty_char="$(printf '%s' "$bar_style_name" | cut -d: -f3)"
+        [ -z "$bar_filled_char" ] && bar_filled_char='='
+        [ -z "$bar_empty_char" ] && bar_empty_char='-'
+        ;;
     *)
         bar_style_name="ascii"
         bar_filled_char='='

@@ -12,7 +12,7 @@ $themeName = if ($env:CLAUDE_CODE_STATUSLINE_THEME) { $env:CLAUDE_CODE_STATUSLIN
 $layoutName = if ($env:CLAUDE_CODE_STATUSLINE_LAYOUT) { $env:CLAUDE_CODE_STATUSLINE_LAYOUT } else { "compact" }
 $barStyleName = if ($env:CLAUDE_CODE_STATUSLINE_BAR_STYLE) { $env:CLAUDE_CODE_STATUSLINE_BAR_STYLE } else { "ascii" }
 if ($layoutName -notin @("compact", "bars")) { $layoutName = "compact" }
-switch ($barStyleName) {
+switch -Wildcard ($barStyleName) {
     "dots" {
         $barFilledChar = [string][char]0x25CF
         $barEmptyChar = [string][char]0x25CB
@@ -20,6 +20,27 @@ switch ($barStyleName) {
     "squares" {
         $barFilledChar = [string][char]0x25A0
         $barEmptyChar = [string][char]0x25A1
+    }
+    "blocks" {
+        $barFilledChar = [string][char]0x2588
+        $barEmptyChar = [string][char]0x2591
+    }
+    "braille" {
+        $barFilledChar = [string][char]0x28FF
+        $barEmptyChar = [string][char]0x2880
+    }
+    "shades" {
+        $barFilledChar = [string][char]0x2593
+        $barEmptyChar = [string][char]0x2591
+    }
+    "diamonds" {
+        $barFilledChar = [string][char]0x25C6
+        $barEmptyChar = [string][char]0x25C7
+    }
+    "custom:*" {
+        $parts = $barStyleName -split ':', 3
+        $barFilledChar = if ($parts.Length -ge 2 -and $parts[1]) { $parts[1] } else { "=" }
+        $barEmptyChar = if ($parts.Length -ge 3 -and $parts[2]) { $parts[2] } else { "-" }
     }
     default {
         $barStyleName = "ascii"

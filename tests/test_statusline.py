@@ -11,11 +11,75 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SHELL_SCRIPT = ROOT / "statusline.sh"
 PS_SCRIPT = ROOT / "statusline.ps1"
+INSTALL_SCRIPT = ROOT / "install.sh"
+TMUX_LAUNCHER_SCRIPT = ROOT / "codex_tmux.sh"
+TMUX_STATUS_SCRIPT = ROOT / "codex_tmux_status.sh"
+CODEX_SCRIPT = ROOT / "codex_statusline.sh"
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 DOTS_BAR_RE = r"[\u25cf\u25cb]+"
 DEFAULT_7D_TIME = "03 06 08:00"
 DEFAULT_7D_SHORT_DATE = "03 06"
 CUSTOM_7D_TIME = "99-03-06 08:00"
+CODEX_TMUX_LAUNCHER_NAME = "codex-tmux"
+CODEX_TMUX_STATUS_NAME = "codex-tmux-status"
+CODEX_STATUSLINE_NAME = "codex-statusline"
+
+# Simulated Codex session JSONL token_count event
+CODEX_TOKEN_COUNT_EVENT = {
+    "timestamp": "2026-03-11T09:50:50.021Z",
+    "type": "event_msg",
+    "payload": {
+        "type": "token_count",
+        "info": {
+            "total_token_usage": {
+                "input_tokens": 87288,
+                "cached_input_tokens": 57728,
+                "output_tokens": 1569,
+                "reasoning_output_tokens": 640,
+                "total_tokens": 88857,
+            },
+            "model_context_window": 258400,
+        },
+        "rate_limits": {
+            "primary": {
+                "used_percent": 14.0,
+                "window_minutes": 300,
+                "resets_at": 4102444800,
+            },
+            "secondary": {
+                "used_percent": 4.0,
+                "window_minutes": 10081,
+                "resets_at": 4102444800,
+            },
+            "credits": None,
+            "plan_type": "plus",
+        },
+    },
+}
+
+CODEX_TOKEN_COUNT_NULL_LIMITS = {
+    "timestamp": "2026-03-11T09:50:50.021Z",
+    "type": "event_msg",
+    "payload": {
+        "type": "token_count",
+        "info": {
+            "total_token_usage": {
+                "input_tokens": 50000,
+                "cached_input_tokens": 30000,
+                "output_tokens": 1000,
+                "reasoning_output_tokens": 500,
+                "total_tokens": 51000,
+            },
+            "model_context_window": 258400,
+        },
+        "rate_limits": {
+            "primary": None,
+            "secondary": None,
+            "credits": None,
+            "plan_type": "plus",
+        },
+    },
+}
 
 SAMPLE_INPUT = {
     "model": {"display_name": "Opus 4.6"},
@@ -117,6 +181,51 @@ class StatusLineTests(unittest.TestCase):
             check=True,
         )
         return result.stdout if raw else strip_ansi(result.stdout)
+
+    def _run_install(self, *args, home=None):
+        env = os.environ.copy()
+        install_home = Path(home) if home is not None else Path(self.temp_dir.name) / "install-home"
+        install_home.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(install_home)
+
+        result = subprocess.run(
+            ["/bin/bash", str(INSTALL_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=ROOT,
+            check=True,
+        )
+        return install_home, strip_ansi(result.stdout)
+
+    def _run_tmux_status(self, cwd=None, extra_env=None):
+        env = os.environ.copy()
+        env["HOME"] = str(self.cache_home)
+        env["TZ"] = "UTC"
+        env["CODEX_STATUSLINE_FORMAT"] = "ansi"  # Force ANSI in tests
+        # Isolate from real session data
+        empty_sessions = Path(self.temp_dir.name) / "empty-sessions"
+        empty_sessions.mkdir(exist_ok=True)
+        env["CODEX_STATUSLINE_SESSION_DIR"] = str(empty_sessions)
+        # Use isolated cache file
+        cache = Path(self.temp_dir.name) / "tmux-codex-cache.json"
+        env["CODEX_STATUSLINE_CACHE_FILE"] = str(cache)
+        try:
+            cache.unlink()
+        except FileNotFoundError:
+            pass
+        if extra_env:
+            env.update(extra_env)
+
+        result = subprocess.run(
+            ["/bin/bash", str(TMUX_STATUS_SCRIPT), str(cwd or self.clean_repo)],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=ROOT,
+            check=True,
+        )
+        return result.stdout.strip()
 
     def _run_pwsh(self, budget=None, extra_env=None):
         runtime = shutil.which("pwsh") or shutil.which("powershell")
@@ -486,6 +595,295 @@ class StatusLineTests(unittest.TestCase):
         self.assertEqual(3, len(lines))
         self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
         self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\]$")
+
+    def test_install_script_codex_target_installs_tmux_assets(self):
+        install_home, _ = self._run_install("--target", "codex")
+
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_LAUNCHER_NAME).exists())
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_STATUS_NAME).exists())
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_STATUSLINE_NAME).exists())
+        self.assertFalse((install_home / ".claude" / "statusline.sh").exists())
+
+    def test_install_script_uninstall_removes_tmux_assets(self):
+        install_home, _ = self._run_install("--target", "codex")
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_LAUNCHER_NAME).exists())
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_STATUS_NAME).exists())
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_STATUSLINE_NAME).exists())
+
+        self._run_install("--uninstall", home=install_home)
+
+        self.assertFalse((install_home / ".codex" / "bin" / CODEX_TMUX_LAUNCHER_NAME).exists())
+        self.assertFalse((install_home / ".codex" / "bin" / CODEX_TMUX_STATUS_NAME).exists())
+        self.assertFalse((install_home / ".codex" / "bin" / CODEX_STATUSLINE_NAME).exists())
+
+    def test_tmux_status_script_renders_local_summary(self):
+        """codex_tmux_status.sh shim now delegates to codex_statusline.sh."""
+        output = self._run_tmux_status()
+        stripped = strip_ansi(output)
+
+        self.assertIn("clean-repo", stripped)
+        self.assertIn("codex/feature/for-claude", stripped)
+
+    def test_tmux_status_script_includes_model_when_available(self):
+        output = self._run_tmux_status(extra_env={"CODEX_MODEL_NAME": "gpt-5.1-codex"})
+        stripped = strip_ansi(output)
+
+        self.assertIn("gpt-5.1-codex", stripped)
+        self.assertIn("clean-repo", stripped)
+
+    def test_tmux_status_script_shows_git_diff_for_dirty_repo(self):
+        repo_dir = Path(self.temp_dir.name) / "dirty-repo-tmux"
+        repo_dir.mkdir()
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+        (repo_dir / "tracked.txt").write_text("base\n")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=repo_dir, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo_dir, check=True, capture_output=True, text=True)
+        (repo_dir / "tracked.txt").write_text("base\nchange\n")
+
+        output = self._run_tmux_status(cwd=repo_dir)
+        stripped = strip_ansi(output)
+
+        self.assertRegex(stripped, r"\(\+\d+ -\d+\)")
+
+    def test_readme_documents_tmux_launcher(self):
+        readme_text = (ROOT / "README.md").read_text()
+
+        self.assertIn("codex-tmux", readme_text)
+        self.assertIn("tmux", readme_text.lower())
+        self.assertIn("codex-statusline", readme_text.lower())
+
+
+class CodexStatusLineTests(unittest.TestCase):
+    """Tests for codex_statusline.sh — Codex CLI status line."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+        # Create temporary git repo
+        self.repo = Path(self.temp_dir.name) / "codex-repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init"], cwd=self.repo, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.repo, check=True)
+        (self.repo / "tracked.txt").write_text("base\n")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=self.repo, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "checkout", "-b", "feat/codex-test"], cwd=self.repo, check=True, capture_output=True, text=True)
+
+        # Create mock ~/.codex/config.toml
+        self.codex_home = Path(self.temp_dir.name) / ".codex"
+        self.codex_home.mkdir()
+        (self.codex_home / "config.toml").write_text(
+            'model = "gpt-5.4"\nmodel_reasoning_effort = "high"\n'
+        )
+
+        # Create mock session JSONL
+        self.session_dir = self.codex_home / "sessions" / "2026" / "03" / "11"
+        self.session_dir.mkdir(parents=True)
+
+    def _write_session(self, events=None):
+        """Write session JSONL file with given events (default: standard token_count)."""
+        if events is None:
+            events = [CODEX_TOKEN_COUNT_EVENT]
+        session_file = self.session_dir / "rollout-test.jsonl"
+        lines = [json.dumps(e) for e in events]
+        session_file.write_text("\n".join(lines) + "\n")
+
+    def _run_codex(self, budget=None, extra_env=None, raw=False, write_session=True, cwd=None):
+        env = os.environ.copy()
+        env["HOME"] = str(Path(self.temp_dir.name))
+        env["TZ"] = "UTC"
+        env["CODEX_STATUSLINE_SESSION_DIR"] = str(self.codex_home / "sessions")
+        env["CODEX_STATUSLINE_FORMAT"] = "ansi"  # Force ANSI in tests (not tmux)
+        # Use isolated cache file per test to avoid interference from real sessions
+        cache = Path(self.temp_dir.name) / "codex-cache.json"
+        env["CODEX_STATUSLINE_CACHE_FILE"] = str(cache)
+        # Clear any existing env overrides
+        codex_keep = {"CODEX_STATUSLINE_SESSION_DIR", "CODEX_STATUSLINE_FORMAT", "CODEX_STATUSLINE_CACHE_FILE"}
+        for key in list(env):
+            if key.startswith("CODEX_STATUSLINE_") or key.startswith("CODEX_MODEL") or key.startswith("CODEX_EFFORT"):
+                if key not in codex_keep:
+                    del env[key]
+        # Clear test cache
+        try:
+            cache.unlink()
+        except FileNotFoundError:
+            pass
+        if budget is not None:
+            env["CODEX_STATUSLINE_MAX_WIDTH"] = str(budget)
+        if extra_env:
+            env.update(extra_env)
+        if write_session:
+            self._write_session()
+
+        result = subprocess.run(
+            ["/bin/bash", str(CODEX_SCRIPT), str(cwd or self.repo)],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=ROOT,
+            check=True,
+        )
+        return result.stdout if raw else strip_ansi(result.stdout)
+
+    def test_codex_model_from_config(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("gpt-5.4", output)
+
+    def test_codex_model_env_override(self):
+        output = self._run_codex(budget=150, extra_env={"CODEX_MODEL_NAME": "o3"})
+        self.assertIn("o3", output)
+        self.assertNotIn("gpt-5.4", output)
+
+    def test_codex_effort_display(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("eff high", output)
+
+    def test_codex_effort_env_override(self):
+        output = self._run_codex(budget=150, extra_env={"CODEX_EFFORT_LEVEL": "low"})
+        self.assertIn("eff low", output)
+
+    def test_codex_ctx_segment(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("ctx 89k/258k 34%", output)
+
+    def test_codex_five_hour_segment(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("5h 14%", output)
+
+    def test_codex_seven_day_segment(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("2w 4%", output)
+
+    def test_codex_rate_limits_null(self):
+        """When rate_limits.primary is null, show placeholder."""
+        session_file = self.session_dir / "rollout-test.jsonl"
+        session_file.write_text(json.dumps(CODEX_TOKEN_COUNT_NULL_LIMITS) + "\n")
+        output = self._run_codex(budget=150, write_session=False)
+        self.assertIn("5h -", output)
+        self.assertIn("2w -", output)
+
+    def test_codex_wide_budget_all_segments(self):
+        output = self._run_codex(budget=150)
+        self.assertIn("gpt-5.4", output)
+        self.assertIn("codex-repo@feat/codex-test", output)
+        self.assertIn("ctx 89k/258k 34%", output)
+        self.assertIn("eff high", output)
+        self.assertIn("5h 14%", output)
+        self.assertIn("2w 4%", output)
+        self.assertLessEqual(len(output), 150)
+
+    def test_codex_narrow_budget_truncation(self):
+        output = self._run_codex(budget=60)
+        self.assertIn("gpt-5.4", output)
+        self.assertIn("ctx 89k/258k 34%", output)
+        self.assertIn("eff high", output)
+        self.assertIn("5h 14%", output)
+        # 2w should be dropped at narrow width
+        self.assertNotIn("2w ", output)
+        self.assertLessEqual(len(output), 60)
+
+    def test_codex_theme_changes_ansi_only(self):
+        default_raw = self._run_codex(budget=150, raw=True)
+        dracula_raw = self._run_codex(
+            budget=150,
+            raw=True,
+            extra_env={"CODEX_STATUSLINE_THEME": "dracula"},
+        )
+        # Different ANSI codes
+        self.assertIn("[38;2;77;166;255m", default_raw)
+        self.assertIn("[38;2;189;147;249m", dracula_raw)
+        # Same plain text
+        self.assertEqual(strip_ansi(default_raw), strip_ansi(dracula_raw))
+
+    def test_codex_bars_layout(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertIn("gpt-5.4", lines[0])
+        self.assertIn("ctx 89k/258k 34%", lines[0])
+        self.assertIn("eff high", lines[0])
+        self.assertNotIn("5h ", lines[0])
+        self.assertNotIn("2w ", lines[0])
+        self.assertRegex(lines[1], r"^5h 14% \[[=\-]+\]")
+        self.assertRegex(lines[2], r"^2w 4% \[[=\-]+\]")
+
+    def test_codex_no_session_graceful(self):
+        """No session file at all — should not crash."""
+        output = self._run_codex(budget=150, write_session=False)
+        self.assertIn("gpt-5.4", output)
+        self.assertIn("ctx 0/0 0%", output)
+        self.assertIn("5h -", output)
+        self.assertIn("2w -", output)
+
+    def test_codex_git_dirty_diff(self):
+        (self.repo / "tracked.txt").write_text("base\nchange\n")
+        output = self._run_codex(budget=150)
+        self.assertRegex(output, r"\(\+\d+ -\d+\)")
+
+    def test_codex_empty_session_dir(self):
+        """Session dir exists but has no .jsonl files."""
+        # Remove session file if present
+        for f in self.session_dir.glob("*.jsonl"):
+            f.unlink()
+        output = self._run_codex(budget=150, write_session=False)
+        self.assertIn("gpt-5.4", output)
+        self.assertIn("5h -", output)
+
+    def test_codex_no_extra_segment(self):
+        """Codex should never show extra usage segment."""
+        output = self._run_codex(budget=200)
+        self.assertNotIn("extra ", output)
+
+    def test_codex_bars_layout_without_usage(self):
+        output = self._run_codex(
+            budget=120,
+            write_session=False,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertEqual("5h -- [----------] n/a", lines[1])
+        self.assertEqual("2w -- [----------] n/a", lines[2])
+
+    def test_codex_bars_layout_dots_style(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_BAR_STYLE": "dots",
+            },
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertIn("\u25cf", lines[1])  # ●
+        self.assertIn("\u25cb", lines[1])  # ○
+
+    def test_codex_unknown_layout_falls_back_to_compact(self):
+        default_output = self._run_codex(budget=100)
+        unknown_output = self._run_codex(
+            budget=100,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "mystery"},
+        )
+        self.assertEqual(default_output, unknown_output)
+
+    def test_codex_all_themes_same_plain_text(self):
+        default_plain = self._run_codex(budget=100)
+        for theme in ["forest", "dracula", "monokai", "solarized", "ocean", "sunset", "amber", "rose"]:
+            themed = self._run_codex(
+                budget=100,
+                extra_env={"CODEX_STATUSLINE_THEME": theme},
+            )
+            self.assertEqual(
+                default_plain, themed,
+                f"Theme '{theme}' changed plain text output",
+            )
 
 
 if __name__ == "__main__":

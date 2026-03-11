@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AICodingStatusLine is a custom status line for Claude Code that displays model info, git context, token usage, and rate limits. It is a fork of [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine). The project consists of two parallel shell scripts (`statusline.sh` for Bash, `statusline.ps1` for PowerShell) that must stay feature-aligned.
+AICodingStatusLine is a custom status line for Claude Code and Codex CLI that displays model info, git context, token usage, and rate limits. It is a fork of [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine). The project consists of two parallel Claude Code scripts (`statusline.sh` for Bash, `statusline.ps1` for PowerShell) that must stay feature-aligned, plus a separate `codex_statusline.sh` for Codex CLI (Bash-only, tmux-based).
 
 ## Commands
 
@@ -20,15 +20,22 @@ printf '%s' '{"cwd":"/tmp","model":{"display_name":"Opus 4.6"}}' | ./statusline.
 
 # Smoke-test PowerShell script
 pwsh -NoProfile -File ./statusline.ps1 < sample.json
+
+# Smoke-test Codex status line
+CODEX_MODEL_NAME=gpt-5.4 ./codex_statusline.sh /path/to/project
 ```
 
 There is no build pipeline, linter, or formatter. Scripts are edited directly.
 
 ## Architecture
 
-Both scripts follow the same pipeline: **read JSON from stdin -> parse model/context/cwd data -> fetch usage from Anthropic API (with 60s cache at `/tmp/claude/statusline-usage-cache.json`) -> compose segments -> adaptive width truncation -> output ANSI-colored text**.
+Both Claude Code scripts follow the same pipeline: **read JSON from stdin -> parse model/context/cwd data -> fetch usage from Anthropic API (with 60s cache at `/tmp/claude/statusline-usage-cache.json`) -> compose segments -> adaptive width truncation -> output ANSI-colored text**.
 
-### Dual-Script Parity
+### Codex CLI Status Line
+
+`codex_statusline.sh` is a standalone Bash script for Codex CLI. It follows a different data pipeline: **read model/effort from `~/.codex/config.toml` -> find latest session JSONL in `~/.codex/sessions/` -> parse last `token_count` event (with 10s cache at `/tmp/codex/statusline-session-cache.json`) -> compose segments -> adaptive width truncation -> output ANSI-colored text**. It shares the same theme system, layout system, and width-adaptive rendering as `statusline.sh` but has no PowerShell counterpart (Codex CLI is macOS/Linux + tmux only). It does not have an `extra` segment (Codex provides no extra usage data). Environment variables use the `CODEX_STATUSLINE_` prefix instead of `CLAUDE_CODE_STATUSLINE_`.
+
+### Dual-Script Parity (Claude Code)
 
 `statusline.sh` (Bash) and `statusline.ps1` (PowerShell) implement identical logic. Changes to one must be mirrored in the other. The PowerShell script must remain ASCII-only (non-ASCII glyphs are built from code points like `[char]0x25CF` instead of source literals).
 
