@@ -9,6 +9,8 @@ if (-not $input) {
 $esc = [char]0x1b
 
 $themeName = if ($env:CLAUDE_CODE_STATUSLINE_THEME) { $env:CLAUDE_CODE_STATUSLINE_THEME } else { "default" }
+$layoutName = if ($env:CLAUDE_CODE_STATUSLINE_LAYOUT) { $env:CLAUDE_CODE_STATUSLINE_LAYOUT } else { "compact" }
+if ($layoutName -notin @("compact", "bars")) { $layoutName = "compact" }
 
 # ANSI palette tuned for dim terminal chrome with one strong accent.
 switch ($themeName) {
@@ -16,6 +18,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;120;196;120m"
         $teal   = "${esc}[38;2;94;170;150m"
         $branch = "${esc}[38;2;214;224;205m"
+        $muted  = "${esc}[38;2;132;144;124m"
         $red    = "${esc}[38;2;224;108;117m"
         $orange = "${esc}[38;2;214;170;84m"
         $yellow = "${esc}[38;2;198;183;101m"
@@ -26,6 +29,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;77;166;255m"
         $teal   = "${esc}[38;2;77;175;176m"
         $branch = "${esc}[38;2;196;208;212m"
+        $muted  = "${esc}[38;2;115;132;139m"
         $red    = "${esc}[38;2;255;85;85m"
         $orange = "${esc}[38;2;255;176;85m"
         $yellow = "${esc}[38;2;230;200;0m"
@@ -38,6 +42,8 @@ $reset  = "${esc}[0m"
 
 $sepPlain = " | "
 $sepText = " ${dim}|${reset} "
+$includeUsageSummary = $true
+$outputText = $null
 
 function New-Segment([string]$text, [string]$plain) {
     return [pscustomobject]@{
@@ -81,6 +87,11 @@ function Truncate-Middle([string]$value, [int]$limit) {
     $leftKeep = [math]::Floor(($limit - 3) / 2)
     $rightKeep = $limit - 3 - $leftKeep
     return $value.Substring(0, $leftKeep) + "..." + $value.Substring($value.Length - $rightKeep)
+}
+
+function Repeat-Char([string]$char, [int]$count) {
+    if ($count -le 0) { return "" }
+    return $char * $count
 }
 
 function Get-OAuthToken {
@@ -256,10 +267,11 @@ function Compose-Output {
 
     $segments.Add((Build-CtxSegment))
     $segments.Add((Build-EffSegment))
-    $segments.Add((Build-FiveHourSegment))
-
-    if ($script:showSevenDay) {
-        $segments.Add((Build-SevenDaySegment))
+    if ($script:includeUsageSummary) {
+        $segments.Add((Build-FiveHourSegment))
+        if ($script:showSevenDay) {
+            $segments.Add((Build-SevenDaySegment))
+        }
     }
 
     if ($script:showExtra) {
@@ -284,6 +296,110 @@ function Compose-Output {
         Text = $text
         Length = $plain.Length
     }
+}
+
+function Build-UsageBarLine([string]$label, [int]$pctValue, [string]$pctText, [string]$fullTime, [string]$shortTime) {
+    $timeText = $fullTime
+    if ($label -eq "5h" -and $script:maxWidth -le 44) {
+        $timeText = $null
+    }
+    if ($label -eq "7d") {
+        if ($script:maxWidth -le 44) {
+            $timeText = $shortTime
+        } elseif ($script:maxWidth -le 52 -and $shortTime) {
+            $timeText = $shortTime
+        }
+    }
+
+    $baseBarWidth = 10
+    $minBarWidth = 4
+    $fixedWidth = $label.Length + 1 + $pctText.Length + 1 + 2
+    if ($timeText) { $fixedWidth += 1 + $timeText.Length }
+
+    $barWidth = $baseBarWidth
+    $availableWidth = $script:maxWidth - $fixedWidth
+    if ($availableWidth -lt $barWidth) { $barWidth = $availableWidth }
+    if ($barWidth -lt $minBarWidth) { $barWidth = $minBarWidth }
+
+    $filledWidth = if ($pctValue -gt 0) { [math]::Floor($pctValue * $barWidth / 100) } else { 0 }
+    if ($filledWidth -gt $barWidth) { $filledWidth = $barWidth }
+    $emptyWidth = $barWidth - $filledWidth
+
+    $filledPlain = Repeat-Char "=" $filledWidth
+    $emptyPlain = Repeat-Char "-" $emptyWidth
+
+    if ($pctText -eq "--") {
+        $pctColor = $branch
+        $timeColor = $branch
+        $filledText = "${muted}${filledPlain}${reset}"
+    } else {
+        $pctColor = Get-UsageColor $pctValue
+        $timeColor = $muted
+        $filledText = "${pctColor}${filledPlain}${reset}"
+    }
+
+    $plain = "$label $pctText [$filledPlain$emptyPlain]"
+    $text = "${dim}${label}${reset} ${pctColor}${pctText}${reset} ${dim}[${reset}${filledText}${muted}${emptyPlain}${reset}${dim}]${reset}"
+    if ($timeText) {
+        $plain += " $timeText"
+        $text += "${timeColor}$timeText${reset}"
+    }
+
+    return New-Segment $text $plain
+}
+
+function Render-CompactOutput([bool]$includeUsage) {
+    $script:includeUsageSummary = $includeUsage
+    $composed = Compose-Output
+
+    if ($composed.Length -gt $script:maxWidth -and $script:showExtra) {
+        $script:showExtra = $false
+        $composed = Compose-Output
+    }
+
+    if ($includeUsage -and $composed.Length -gt $script:maxWidth -and $script:showSevenDayReset) {
+        $script:showSevenDayReset = $false
+        $composed = Compose-Output
+    }
+
+    if ($includeUsage -and $composed.Length -gt $script:maxWidth -and $script:showFiveHourReset) {
+        $script:showFiveHourReset = $false
+        $composed = Compose-Output
+    }
+
+    if ($composed.Length -gt $script:maxWidth -and $script:showGitDiff) {
+        $script:showGitDiff = $false
+        $composed = Compose-Output
+    }
+
+    if ($includeUsage -and $composed.Length -gt $script:maxWidth -and $script:showSevenDay) {
+        $script:showSevenDay = $false
+        $composed = Compose-Output
+    }
+
+    if ($composed.Length -gt $script:maxWidth -and $script:gitSegmentLen -gt 0) {
+        $availableForGit = $script:maxWidth - ($composed.Length - $script:gitSegmentLen)
+        if ($availableForGit -lt 3) { $availableForGit = 3 }
+        $script:gitTruncateWidth = $availableForGit
+        $composed = Compose-Output
+    }
+
+    $script:outputText = $composed.Text
+}
+
+function Render-BarsOutput {
+    Render-CompactOutput $false
+    $topLine = $script:outputText
+
+    if ($script:usageAvailable) {
+        $fiveLine = Build-UsageBarLine "5h" $script:fiveHourPct "$($script:fiveHourPct)%" $script:fiveHourReset $null
+        $sevenLine = Build-UsageBarLine "7d" $script:sevenDayPct "$($script:sevenDayPct)%" $script:sevenDayReset $script:sevenDayDate
+    } else {
+        $fiveLine = Build-UsageBarLine "5h" 0 "--" "n/a" $null
+        $sevenLine = Build-UsageBarLine "7d" 0 "--" "n/a" $null
+    }
+
+    $script:outputText = $topLine + "`n" + $fiveLine.Text + "`n" + $sevenLine.Text
 }
 
 $data = $input | ConvertFrom-Json
@@ -370,6 +486,7 @@ $fiveHourPct = 0
 $fiveHourReset = $null
 $sevenDayPct = 0
 $sevenDayReset = $null
+$sevenDayDate = $null
 $extraEnabled = $false
 $extraUsed = $null
 $extraLimit = $null
@@ -385,6 +502,7 @@ if ($usageData) {
 
             $sevenDayPct = [math]::Floor([double]$usage.seven_day.utilization)
             $sevenDayReset = Format-ResetTime $usage.seven_day.resets_at "datetime"
+            $sevenDayDate = Format-ResetTime $usage.seven_day.resets_at "date"
             $showSevenDayReset = [bool]$sevenDayReset
 
             $extraEnabled = ($usage.extra_usage.is_enabled -eq $true)
@@ -398,38 +516,10 @@ if ($usageData) {
 }
 
 $maxWidth = Get-MaxWidth
-$composed = Compose-Output
-
-if ($composed.Length -gt $maxWidth -and $showExtra) {
-    $showExtra = $false
-    $composed = Compose-Output
+if ($layoutName -eq "bars") {
+    Render-BarsOutput
+} else {
+    Render-CompactOutput $true
 }
 
-if ($composed.Length -gt $maxWidth -and $showSevenDayReset) {
-    $showSevenDayReset = $false
-    $composed = Compose-Output
-}
-
-if ($composed.Length -gt $maxWidth -and $showFiveHourReset) {
-    $showFiveHourReset = $false
-    $composed = Compose-Output
-}
-
-if ($composed.Length -gt $maxWidth -and $showGitDiff) {
-    $showGitDiff = $false
-    $composed = Compose-Output
-}
-
-if ($composed.Length -gt $maxWidth -and $showSevenDay) {
-    $showSevenDay = $false
-    $composed = Compose-Output
-}
-
-if ($composed.Length -gt $maxWidth -and $gitSegmentLen -gt 0) {
-    $availableForGit = $maxWidth - ($composed.Length - $gitSegmentLen)
-    if ($availableForGit -lt 3) { $availableForGit = 3 }
-    $gitTruncateWidth = $availableForGit
-    $composed = Compose-Output
-}
-
-[Console]::Out.Write($composed.Text)
+[Console]::Out.Write($outputText)

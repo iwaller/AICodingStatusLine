@@ -113,7 +113,7 @@ class StatusLineTests(unittest.TestCase):
         )
         return result.stdout if raw else strip_ansi(result.stdout)
 
-    def _run_pwsh(self, budget=None):
+    def _run_pwsh(self, budget=None, extra_env=None):
         runtime = shutil.which("pwsh") or shutil.which("powershell")
         if runtime is None:
             self.skipTest("PowerShell runtime unavailable")
@@ -128,6 +128,8 @@ class StatusLineTests(unittest.TestCase):
             env["CLAUDE_CODE_STATUSLINE_MAX_WIDTH"] = str(budget)
         else:
             env.pop("CLAUDE_CODE_STATUSLINE_MAX_WIDTH", None)
+        if extra_env:
+            env.update(extra_env)
 
         result = subprocess.run(
             [runtime, "-NoProfile", "-File", str(PS_SCRIPT)],
@@ -213,6 +215,92 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("[38;2;77;166;255m", default_raw)
         self.assertIn("[38;2;120;196;120m", forest_raw)
         self.assertEqual(strip_ansi(default_raw), strip_ansi(forest_raw))
+
+    def test_unknown_layout_falls_back_to_compact(self):
+        default_output = self._run_shell(budget=100)
+        unknown_output = self._run_shell(
+            budget=100,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "mystery"},
+        )
+
+        self.assertEqual(default_output, unknown_output)
+
+    def test_bars_layout_outputs_three_lines_with_usage_bars(self):
+        output = self._run_shell(
+            budget=120,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+
+        self.assertEqual(3, len(lines))
+        self.assertIn("Opus 4.6", lines[0])
+        self.assertIn("ctx 15k/200k 7%", lines[0])
+        self.assertIn("eff low", lines[0])
+        self.assertNotIn("5h ", lines[0])
+        self.assertNotIn("7d ", lines[0])
+        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\] 2:00$")
+        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\] Mar 6 8:00$")
+
+    def test_bars_layout_narrow_width_keeps_bar_and_drops_time_first(self):
+        output = self._run_shell(
+            budget=44,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+
+        self.assertEqual(3, len(lines))
+        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
+        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\]( Mar 6)?$")
+        self.assertIn("[", lines[1])
+        self.assertIn("[", lines[2])
+
+    def test_bars_layout_without_usage_keeps_placeholders(self):
+        output = self._run_shell(
+            budget=120,
+            usage=False,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+
+        self.assertEqual(3, len(lines))
+        self.assertEqual("5h -- [----------] n/a", lines[1])
+        self.assertEqual("7d -- [----------] n/a", lines[2])
+
+    def test_bars_layout_theme_changes_only_ansi(self):
+        default_raw = self._run_shell(
+            budget=120,
+            raw=True,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        forest_raw = self._run_shell(
+            budget=120,
+            raw=True,
+            extra_env={
+                "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
+                "CLAUDE_CODE_STATUSLINE_THEME": "forest",
+            },
+        )
+
+        self.assertIn("[38;2;77;166;255m", default_raw)
+        self.assertIn("[38;2;120;196;120m", forest_raw)
+        self.assertEqual(strip_ansi(default_raw), strip_ansi(forest_raw))
+
+    def test_powershell_bars_layout_matches_line_order_when_available(self):
+        shell_output = self._run_shell(
+            budget=120,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        pwsh_output = self._run_pwsh(
+            budget=120,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+
+        shell_lines = shell_output.splitlines()
+        pwsh_lines = pwsh_output.splitlines()
+        self.assertEqual(3, len(pwsh_lines))
+        self.assertEqual(shell_lines[0], pwsh_lines[0])
+        self.assertRegex(pwsh_lines[1], r"^5h 83% \[[=\-]+\] 2:00$")
+        self.assertRegex(pwsh_lines[2], r"^7d 63% \[[=\-]+\] Mar 6 8:00$")
 
 
 if __name__ == "__main__":

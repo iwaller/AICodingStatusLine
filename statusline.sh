@@ -10,6 +10,11 @@ if [ -z "$input" ]; then
 fi
 
 theme_name="${CLAUDE_CODE_STATUSLINE_THEME:-default}"
+layout_name="${CLAUDE_CODE_STATUSLINE_LAYOUT:-compact}"
+case "$layout_name" in
+    bars|compact) ;;
+    *) layout_name="compact" ;;
+esac
 
 # ANSI palette tuned for dim terminal chrome with one strong accent.
 case "$theme_name" in
@@ -17,6 +22,7 @@ case "$theme_name" in
         accent='\033[38;2;120;196;120m'
         teal='\033[38;2;94;170;150m'
         branch='\033[38;2;214;224;205m'
+        muted='\033[38;2;132;144;124m'
         red='\033[38;2;224;108;117m'
         orange='\033[38;2;214;170;84m'
         yellow='\033[38;2;198;183;101m'
@@ -27,6 +33,7 @@ case "$theme_name" in
         accent='\033[38;2;77;166;255m'
         teal='\033[38;2;77;175;176m'
         branch='\033[38;2;196;208;212m'
+        muted='\033[38;2;115;132;139m'
         red='\033[38;2;255;85;85m'
         orange='\033[38;2;255;176;85m'
         yellow='\033[38;2;230;200;0m'
@@ -46,6 +53,10 @@ COMPOSED_TEXT=""
 COMPOSED_PLAIN=""
 COMPOSED_LEN=0
 GIT_SEGMENT_LEN=0
+OUTPUT_TEXT=""
+LINE_TEXT=""
+LINE_PLAIN=""
+include_usage_summary=1
 
 format_tokens() {
     local num=$1
@@ -123,6 +134,14 @@ add_segment() {
     segment_plains+=("$2")
 }
 
+repeat_char() {
+    local count="$1"
+    local char="$2"
+
+    [ "$count" -le 0 ] && return
+    printf "%${count}s" "" | tr ' ' "$char"
+}
+
 compose_segments() {
     segment_texts=()
     segment_plains=()
@@ -143,12 +162,14 @@ compose_segments() {
     build_eff_segment
     add_segment "$SEG_TEXT" "$SEG_PLAIN"
 
-    build_five_hour_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
-
-    if [ "$show_seven_day" -eq 1 ]; then
-        build_seven_day_segment
+    if [ "$include_usage_summary" -eq 1 ]; then
+        build_five_hour_segment
         add_segment "$SEG_TEXT" "$SEG_PLAIN"
+
+        if [ "$show_seven_day" -eq 1 ]; then
+            build_seven_day_segment
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
     fi
 
     if [ "$show_extra" -eq 1 ]; then
@@ -292,6 +313,140 @@ build_extra_segment() {
 
     SEG_PLAIN="extra enabled"
     SEG_TEXT="${dim}extra${reset} ${branch}enabled${reset}"
+}
+
+build_usage_bar_line() {
+    local label="$1"
+    local pct_value="$2"
+    local pct_text="$3"
+    local full_time="$4"
+    local short_time="$5"
+    local time_text="$full_time"
+    local base_bar_width=10
+    local min_bar_width=4
+
+    if [ "$label" = "5h" ] && [ "$max_width" -le 44 ]; then
+        time_text=""
+    fi
+
+    if [ "$label" = "7d" ]; then
+        if [ "$max_width" -le 44 ]; then
+            time_text="$short_time"
+        elif [ "$max_width" -le 52 ] && [ -n "$short_time" ]; then
+            time_text="$short_time"
+        fi
+    fi
+
+    local fixed_width=$(( ${#label} + 1 + ${#pct_text} + 1 + 2 ))
+    if [ -n "$time_text" ]; then
+        fixed_width=$(( fixed_width + 1 + ${#time_text} ))
+    fi
+
+    local bar_width=$base_bar_width
+    local available_width=$(( max_width - fixed_width ))
+    if [ "$available_width" -lt "$bar_width" ]; then
+        bar_width="$available_width"
+    fi
+    if [ "$bar_width" -lt "$min_bar_width" ]; then
+        bar_width="$min_bar_width"
+    fi
+
+    local filled_width=0
+    if [ "$pct_value" -gt 0 ]; then
+        filled_width=$(( pct_value * bar_width / 100 ))
+    fi
+    if [ "$filled_width" -gt "$bar_width" ]; then
+        filled_width="$bar_width"
+    fi
+    local empty_width=$(( bar_width - filled_width ))
+
+    local filled_plain empty_plain filled_text pct_color time_color
+    filled_plain=$(repeat_char "$filled_width" "=")
+    empty_plain=$(repeat_char "$empty_width" "-")
+
+    if [ "$pct_text" = "--" ]; then
+        pct_color="$branch"
+        time_color="$branch"
+        filled_text="${muted}${filled_plain}${reset}"
+    else
+        pct_color=$(usage_color "$pct_value")
+        time_color="$muted"
+        filled_text="${pct_color}${filled_plain}${reset}"
+    fi
+
+    LINE_PLAIN="${label} ${pct_text} [${filled_plain}${empty_plain}]"
+    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${muted}${empty_plain}${reset}${dim}]${reset}"
+
+    if [ -n "$time_text" ]; then
+        LINE_PLAIN+=" ${time_text}"
+        LINE_TEXT+=" ${time_color}${time_text}${reset}"
+    fi
+}
+
+render_compact_output() {
+    include_usage_summary="$1"
+    compose_segments
+
+    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_extra" -eq 1 ]; then
+        show_extra=0
+        compose_segments
+    fi
+
+    if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day_reset" -eq 1 ]; then
+        show_seven_day_reset=0
+        compose_segments
+    fi
+
+    if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_five_hour_reset" -eq 1 ]; then
+        show_five_hour_reset=0
+        compose_segments
+    fi
+
+    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_git_diff" -eq 1 ]; then
+        show_git_diff=0
+        compose_segments
+    fi
+
+    if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day" -eq 1 ]; then
+        show_seven_day=0
+        compose_segments
+    fi
+
+    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$GIT_SEGMENT_LEN" -gt 0 ]; then
+        available_for_git=$(( max_width - (COMPOSED_LEN - GIT_SEGMENT_LEN) ))
+        if [ "$available_for_git" -lt 3 ]; then
+            available_for_git=3
+        fi
+        git_truncate_width="$available_for_git"
+        compose_segments
+    fi
+
+    OUTPUT_TEXT="$COMPOSED_TEXT"
+}
+
+render_bars_output() {
+    local full_five_time="$five_hour_reset"
+    local full_seven_time="$seven_day_reset"
+    local short_seven_time="$seven_day_date"
+
+    render_compact_output 0
+    local top_line="$OUTPUT_TEXT"
+
+    if [ "$usage_available" -eq 1 ]; then
+        build_usage_bar_line "5h" "$five_hour_pct" "${five_hour_pct}%" "$full_five_time" ""
+    else
+        build_usage_bar_line "5h" 0 "--" "n/a" ""
+    fi
+    local five_line="$LINE_TEXT"
+
+    if [ "$usage_available" -eq 1 ]; then
+        build_usage_bar_line "7d" "$seven_day_pct" "${seven_day_pct}%" "$full_seven_time" "$short_seven_time"
+    else
+        build_usage_bar_line "7d" 0 "--" "n/a" ""
+    fi
+    local seven_line="$LINE_TEXT"
+
+    OUTPUT_TEXT="${top_line}"$'\n'"${five_line}"$'\n'"${seven_line}"
 }
 
 get_oauth_token() {
@@ -489,6 +644,7 @@ five_hour_pct=0
 five_hour_reset=""
 seven_day_pct=0
 seven_day_reset=""
+seven_day_date=""
 extra_enabled="false"
 extra_used=""
 extra_limit=""
@@ -503,6 +659,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e '.five_hour' >/dev/null 2>
     seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
     seven_day_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
     seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "datetime")
+    seven_day_date=$(format_reset_time "$seven_day_reset_iso" "date")
     [ -n "$seven_day_reset" ] && show_seven_day_reset=1
 
     extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
@@ -516,41 +673,11 @@ fi
 [ -n "$git_stat" ] && show_git_diff=1
 max_width=$(get_max_width)
 
-compose_segments
-
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_extra" -eq 1 ]; then
-    show_extra=0
-    compose_segments
+if [ "$layout_name" = "bars" ]; then
+    render_bars_output
+else
+    render_compact_output 1
 fi
 
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day_reset" -eq 1 ]; then
-    show_seven_day_reset=0
-    compose_segments
-fi
-
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_five_hour_reset" -eq 1 ]; then
-    show_five_hour_reset=0
-    compose_segments
-fi
-
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_git_diff" -eq 1 ]; then
-    show_git_diff=0
-    compose_segments
-fi
-
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day" -eq 1 ]; then
-    show_seven_day=0
-    compose_segments
-fi
-
-if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$GIT_SEGMENT_LEN" -gt 0 ]; then
-    available_for_git=$(( max_width - (COMPOSED_LEN - GIT_SEGMENT_LEN) ))
-    if [ "$available_for_git" -lt 3 ]; then
-        available_for_git=3
-    fi
-    git_truncate_width="$available_for_git"
-    compose_segments
-fi
-
-printf "%b" "$COMPOSED_TEXT"
+printf "%b" "$OUTPUT_TEXT"
 exit 0
