@@ -181,21 +181,25 @@ Copy-Item statusline.ps1 "$env:USERPROFILE\.claude\statusline.ps1"
 
 通过 `CLAUDE_CODE_STATUSLINE_THEME` 切换 ANSI 配色方案：
 
-| 值 | 风格 |
-|----|------|
-| `default` | **默认**。蓝色主调，高对比度 |
-| `forest` | 绿色主调，柔和自然 |
+| 值 | 风格 | 灵感来源 |
+|----|------|----------|
+| `default` | **默认**。蓝色主调，高对比度 | — |
+| `forest` | 绿色主调，柔和自然 | — |
+| `dracula` | 紫色主调，暗色背景下表现出色 | [Dracula Theme](https://draculatheme.com) |
+| `monokai` | 青色主调，经典代码编辑器风格 | [Monokai Pro](https://monokai.pro) |
+| `solarized` | 蓝色主调，低对比度护眼 | [Solarized](https://ethanschoonover.com/solarized) |
+| `ocean` | 青蓝主调，清爽海洋风 | Material Design |
 
 未知值自动回退到 `default`。
 
 ### 配色对照
 
-| 色彩角色 | `default` | `forest` |
-|----------|-----------|----------|
-| 主强调色 | 蓝 `#4DA6FF` | 绿 `#78C478` |
-| Teal | `#4DAFB0` | `#5EAA96` |
-| 分支名 | `#C4D0D4` | `#D6E0CD` |
-| 弱化文字 | `#73848B` | `#84907C` |
+| 色彩角色 | `default` | `forest` | `dracula` | `monokai` | `solarized` | `ocean` |
+|----------|-----------|----------|-----------|-----------|-------------|---------|
+| 主强调色 | 🔵 `#4DA6FF` | 🟢 `#78C478` | 🟣 `#BD93F9` | 🔵 `#66D9EF` | 🔵 `#268BD2` | 🔵 `#00BCD4` |
+| 目录/Teal | `#4DAFB0` | `#5EAA96` | `#8BE9FD` | `#A6E22E` | `#2AA198` | `#0097A7` |
+| 分支名 | `#C4D0D4` | `#D6E0CD` | `#F8F8F2` | `#E6DB74` | `#93A1A1` | `#B2EBF2` |
+| 弱化文字 | `#73848B` | `#84907C` | `#6272A4` | `#75715E` | `#586E75` | `#78909C` |
 
 ---
 
@@ -207,7 +211,7 @@ Copy-Item statusline.ps1 "$env:USERPROFILE\.claude\statusline.ps1"
 |----------|--------|------|
 | `CLAUDE_CODE_STATUSLINE_LAYOUT` | `compact` | 布局模式：`compact` 或 `bars` |
 | `CLAUDE_CODE_STATUSLINE_BAR_STYLE` | `ascii` | 进度条字符：`ascii`、`dots`、`squares` |
-| `CLAUDE_CODE_STATUSLINE_THEME` | `default` | 配色主题：`default`、`forest` |
+| `CLAUDE_CODE_STATUSLINE_THEME` | `default` | 配色主题：`default`、`forest`、`dracula`、`monokai`、`solarized`、`ocean` |
 | `CLAUDE_CODE_STATUSLINE_MAX_WIDTH` | 终端宽度 | 强制指定宽度预算（正整数） |
 | `CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT` | `%m %d %H:%M` | 自定义 7d 重置时间格式 |
 

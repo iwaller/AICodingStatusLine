@@ -221,6 +221,27 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("[38;2;120;196;120m", forest_raw)
         self.assertEqual(strip_ansi(default_raw), strip_ansi(forest_raw))
 
+    def test_all_themes_produce_same_plain_text(self):
+        default_plain = self._run_shell(budget=100)
+        theme_accent_markers = {
+            "dracula": "[38;2;189;147;249m",
+            "monokai": "[38;2;102;217;239m",
+            "solarized": "[38;2;38;139;210m",
+            "ocean": "[38;2;0;188;212m",
+        }
+        for theme, marker in theme_accent_markers.items():
+            raw = self._run_shell(
+                budget=100,
+                raw=True,
+                extra_env={"CLAUDE_CODE_STATUSLINE_THEME": theme},
+            )
+            self.assertIn(marker, raw, f"Theme '{theme}' missing accent color")
+            self.assertEqual(
+                default_plain,
+                strip_ansi(raw),
+                f"Theme '{theme}' changed plain text output",
+            )
+
     def test_unknown_layout_falls_back_to_compact(self):
         default_output = self._run_shell(budget=100)
         unknown_output = self._run_shell(
