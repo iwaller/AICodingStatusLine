@@ -62,6 +62,8 @@ reset='\033[0m'
 
 sep_plain=' | '
 sep_text=" ${dim}|${reset} "
+default_seven_day_time_format='%m %d %H:%M'
+short_seven_day_date_format='%m %d'
 
 SEG_TEXT=""
 SEG_PLAIN=""
@@ -96,6 +98,22 @@ usage_color() {
     else
         printf "%s" "$green"
     fi
+}
+
+is_valid_seven_day_time_format() {
+    local value="$1"
+    [[ "$value" =~ ^(%[yYmdHMbB]|[[:space:]/:-])+$ ]]
+}
+
+resolve_seven_day_time_format() {
+    local requested="$1"
+
+    if [ -n "$requested" ] && is_valid_seven_day_time_format "$requested"; then
+        printf "%s" "$requested"
+        return
+    fi
+
+    printf "%s" "$default_seven_day_time_format"
 }
 
 is_positive_int() {
@@ -543,9 +561,21 @@ iso_to_epoch() {
     return 1
 }
 
+is_future_epoch() {
+    local iso_str="$1"
+    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return 1
+    local epoch
+    epoch=$(iso_to_epoch "$iso_str")
+    [ -z "$epoch" ] && return 1
+    local now
+    now=$(date +%s)
+    [ "$epoch" -gt "$now" ]
+}
+
 format_reset_time() {
     local iso_str="$1"
-    local style="$2"
+    local format_string="$2"
+    local trim_hour="$3"
     [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return
 
     local epoch
@@ -553,27 +583,17 @@ format_reset_time() {
     [ -z "$epoch" ] && return
 
     local formatted=""
-    case "$style" in
-        time)
-            formatted=$(date -d "@$epoch" +"%H:%M" 2>/dev/null) || \
-            formatted=$(date -j -r "$epoch" +"%H:%M" 2>/dev/null)
-            ;;
-        datetime)
-            formatted=$(date -d "@$epoch" +"%b %-d %H:%M" 2>/dev/null) || \
-            formatted=$(date -j -r "$epoch" +"%b %-d %H:%M" 2>/dev/null)
-            ;;
-        *)
-            formatted=$(date -d "@$epoch" +"%b %-d" 2>/dev/null) || \
-            formatted=$(date -j -r "$epoch" +"%b %-d" 2>/dev/null)
-            ;;
-    esac
+    formatted=$(date -d "@$epoch" +"$format_string" 2>/dev/null) || \
+    formatted=$(date -j -r "$epoch" +"$format_string" 2>/dev/null)
 
-    if [ -n "$formatted" ]; then
+    if [ -n "$formatted" ] && [ "$trim_hour" = "1" ]; then
         formatted=$(printf "%s" "$formatted" | sed -E 's/(^| )0([0-9]:)/\1\2/g')
     fi
 
     [ -n "$formatted" ] && printf "%s" "$formatted"
 }
+
+seven_day_time_format=$(resolve_seven_day_time_format "${CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT:-}")
 
 model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"')
 
@@ -674,14 +694,18 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e '.five_hour' >/dev/null 2>
     usage_available=1
     five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
     five_hour_reset_iso=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
-    five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "time")
-    [ -n "$five_hour_reset" ] && show_five_hour_reset=1
+    if is_future_epoch "$five_hour_reset_iso"; then
+        five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "%H:%M" "1")
+        [ -n "$five_hour_reset" ] && show_five_hour_reset=1
+    fi
 
     seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
     seven_day_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
-    seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "datetime")
-    seven_day_date=$(format_reset_time "$seven_day_reset_iso" "date")
-    [ -n "$seven_day_reset" ] && show_seven_day_reset=1
+    if is_future_epoch "$seven_day_reset_iso"; then
+        seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "$seven_day_time_format" "0")
+        seven_day_date=$(format_reset_time "$seven_day_reset_iso" "$short_seven_day_date_format" "0")
+        [ -n "$seven_day_reset" ] && show_seven_day_reset=1
+    fi
 
     extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
     if [ "$extra_enabled" = "true" ]; then

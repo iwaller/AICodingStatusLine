@@ -13,6 +13,9 @@ SHELL_SCRIPT = ROOT / "statusline.sh"
 PS_SCRIPT = ROOT / "statusline.ps1"
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 DOTS_BAR_RE = r"[\u25cf\u25cb]+"
+DEFAULT_7D_TIME = "03 06 08:00"
+DEFAULT_7D_SHORT_DATE = "03 06"
+CUSTOM_7D_TIME = "99-03-06 08:00"
 
 SAMPLE_INPUT = {
     "model": {"display_name": "Opus 4.6"},
@@ -27,8 +30,8 @@ SAMPLE_INPUT = {
 }
 
 SAMPLE_USAGE = {
-    "five_hour": {"utilization": 83, "resets_at": "2026-03-11T02:00:00Z"},
-    "seven_day": {"utilization": 63, "resets_at": "2026-03-06T08:00:00Z"},
+    "five_hour": {"utilization": 83, "resets_at": "2099-03-11T02:00:00Z"},
+    "seven_day": {"utilization": 63, "resets_at": "2099-03-06T08:00:00Z"},
     "extra_usage": {
         "is_enabled": True,
         "utilization": 12,
@@ -144,14 +147,14 @@ class StatusLineTests(unittest.TestCase):
         return strip_ansi(result.stdout)
 
     def test_wide_budget_keeps_all_segments(self):
-        output = self._run_shell(budget=130)
+        output = self._run_shell(budget=145)
         self.assertIn("Opus 4.6", output)
         self.assertIn("ctx 15k/200k 7%", output)
         self.assertIn("eff low", output)
         self.assertIn("5h 83% 2:00", output)
-        self.assertIn("7d 63% Mar 6 8:00", output)
+        self.assertIn(f"7d 63% {DEFAULT_7D_TIME}", output)
         self.assertIn("extra $12.34/$20.00", output)
-        self.assertLessEqual(len(output), 130)
+        self.assertLessEqual(len(output), 145)
 
     def test_medium_budget_drops_extra_before_core_segments(self):
         output = self._run_shell(budget=100)
@@ -202,6 +205,7 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("ctx 15k/200k 7%", pwsh_output)
         self.assertIn("eff low", pwsh_output)
         self.assertIn("5h 83% 2:00", pwsh_output)
+        self.assertIn(f"7d 63% {DEFAULT_7D_TIME}", pwsh_output)
         self.assertNotIn("extra ", pwsh_output)
         self.assertEqual(shell_output.split(" | ")[:4], pwsh_output.split(" | ")[:4])
 
@@ -244,7 +248,7 @@ class StatusLineTests(unittest.TestCase):
         self.assertNotIn("5h ", lines[0])
         self.assertNotIn("7d ", lines[0])
         self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\] 2:00$")
-        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\] Mar 6 8:00$")
+        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\] {re.escape(DEFAULT_7D_TIME)}$")
 
     def test_bars_layout_narrow_width_keeps_bar_and_drops_time_first(self):
         output = self._run_shell(
@@ -255,9 +259,49 @@ class StatusLineTests(unittest.TestCase):
 
         self.assertEqual(3, len(lines))
         self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
-        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\]( Mar 6)?$")
+        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\]( {re.escape(DEFAULT_7D_SHORT_DATE)})?$")
         self.assertIn("[", lines[1])
         self.assertIn("[", lines[2])
+
+    def test_custom_seven_day_time_format_applies_in_compact_layout(self):
+        output = self._run_shell(
+            budget=130,
+            extra_env={"CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%y-%m-%d %H:%M"},
+        )
+
+        self.assertIn(f"7d 63% {CUSTOM_7D_TIME}", output)
+
+    def test_invalid_seven_day_time_format_falls_back_to_default(self):
+        output = self._run_shell(
+            budget=130,
+            extra_env={"CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%q-%m"},
+        )
+
+        self.assertIn(f"7d 63% {DEFAULT_7D_TIME}", output)
+
+    def test_bars_layout_uses_custom_seven_day_time_format(self):
+        output = self._run_shell(
+            budget=120,
+            extra_env={
+                "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
+                "CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%y-%m-%d %H:%M",
+            },
+        )
+        lines = output.splitlines()
+
+        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\] {re.escape(CUSTOM_7D_TIME)}$")
+
+    def test_bars_layout_narrow_width_uses_short_default_date_for_seven_day(self):
+        output = self._run_shell(
+            budget=44,
+            extra_env={
+                "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
+                "CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%y-%m-%d %H:%M",
+            },
+        )
+        lines = output.splitlines()
+
+        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\]( {re.escape(DEFAULT_7D_SHORT_DATE)})?$")
 
     def test_bars_layout_without_usage_keeps_placeholders(self):
         output = self._run_shell(
@@ -283,7 +327,7 @@ class StatusLineTests(unittest.TestCase):
 
         self.assertEqual(3, len(lines))
         self.assertRegex(lines[1], rf"^5h 83% \[{DOTS_BAR_RE}\] 2:00$")
-        self.assertRegex(lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] Mar 6 8:00$")
+        self.assertRegex(lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] {re.escape(DEFAULT_7D_TIME)}$")
         self.assertIn("●", lines[1])
         self.assertIn("○", lines[1])
 
@@ -351,7 +395,20 @@ class StatusLineTests(unittest.TestCase):
         self.assertEqual(3, len(pwsh_lines))
         self.assertEqual(shell_lines[0], pwsh_lines[0])
         self.assertRegex(pwsh_lines[1], r"^5h 83% \[[=\-]+\] 2:00$")
-        self.assertRegex(pwsh_lines[2], r"^7d 63% \[[=\-]+\] Mar 6 8:00$")
+        self.assertRegex(pwsh_lines[2], rf"^7d 63% \[[=\-]+\] {re.escape(DEFAULT_7D_TIME)}$")
+
+    def test_powershell_custom_seven_day_time_format_matches_shell(self):
+        shell_output = self._run_shell(
+            budget=120,
+            extra_env={"CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%y-%m-%d %H:%M"},
+        )
+        pwsh_output = self._run_pwsh(
+            budget=120,
+            extra_env={"CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%y-%m-%d %H:%M"},
+        )
+
+        self.assertIn(f"7d 63% {CUSTOM_7D_TIME}", shell_output)
+        self.assertIn(f"7d 63% {CUSTOM_7D_TIME}", pwsh_output)
 
     def test_powershell_bars_layout_uses_selected_bar_style_when_available(self):
         shell_output = self._run_shell(
@@ -373,7 +430,36 @@ class StatusLineTests(unittest.TestCase):
         pwsh_lines = pwsh_output.splitlines()
         self.assertEqual(shell_lines[0], pwsh_lines[0])
         self.assertRegex(pwsh_lines[1], rf"^5h 83% \[{DOTS_BAR_RE}\] 2:00$")
-        self.assertRegex(pwsh_lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] Mar 6 8:00$")
+        self.assertRegex(pwsh_lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] {re.escape(DEFAULT_7D_TIME)}$")
+
+
+    def test_past_reset_time_is_hidden(self):
+        past_usage = {
+            "five_hour": {"utilization": 83, "resets_at": "2020-01-01T02:00:00Z"},
+            "seven_day": {"utilization": 63, "resets_at": "2020-01-01T08:00:00Z"},
+            "extra_usage": {"is_enabled": False},
+        }
+        output = self._run_shell(budget=145, usage=past_usage)
+        self.assertIn("5h 83%", output)
+        self.assertNotRegex(output, r"5h 83% \d")
+        self.assertIn("7d 63%", output)
+        self.assertNotRegex(output, r"7d 63% \d")
+
+    def test_bars_layout_past_reset_time_is_hidden(self):
+        past_usage = {
+            "five_hour": {"utilization": 83, "resets_at": "2020-01-01T02:00:00Z"},
+            "seven_day": {"utilization": 63, "resets_at": "2020-01-01T08:00:00Z"},
+            "extra_usage": {"is_enabled": False},
+        }
+        output = self._run_shell(
+            budget=120,
+            usage=past_usage,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
+        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\]$")
 
 
 if __name__ == "__main__":

@@ -55,6 +55,8 @@ switch ($themeName) {
 }
 $dim    = "${esc}[2m"
 $reset  = "${esc}[0m"
+$defaultSevenDayTimeFormat = "%m %d %H:%M"
+$shortSevenDayDateFormat = "%m %d"
 
 $sepPlain = " | "
 $sepText = " ${dim}|${reset} "
@@ -110,6 +112,54 @@ function Repeat-Char([string]$char, [int]$count) {
     return $char * $count
 }
 
+function Convert-FromStrftimeFormat([string]$format) {
+    if (-not $format) { return $null }
+
+    $builder = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $format.Length; $i++) {
+        $ch = $format[$i]
+        if ($ch -eq '%') {
+            if ($i + 1 -ge $format.Length) { return $null }
+            $i++
+            switch ($format[$i]) {
+                'y' { [void]$builder.Append('yy') }
+                'Y' { [void]$builder.Append('yyyy') }
+                'm' { [void]$builder.Append('MM') }
+                'd' { [void]$builder.Append('dd') }
+                'H' { [void]$builder.Append('HH') }
+                'M' { [void]$builder.Append('mm') }
+                'b' { [void]$builder.Append('MMM') }
+                'B' { [void]$builder.Append('MMMM') }
+                default { return $null }
+            }
+            continue
+        }
+
+        if (" -/:".Contains([string]$ch)) {
+            [void]$builder.Append($ch)
+            continue
+        }
+
+        return $null
+    }
+
+    return $builder.ToString()
+}
+
+function Resolve-SevenDayTimeFormat([string]$format) {
+    $resolved = if ($format) { $format } else { $defaultSevenDayTimeFormat }
+    $dotNetFormat = Convert-FromStrftimeFormat $resolved
+    if (-not $dotNetFormat) {
+        $resolved = $defaultSevenDayTimeFormat
+        $dotNetFormat = Convert-FromStrftimeFormat $resolved
+    }
+
+    return [pscustomobject]@{
+        Strftime = $resolved
+        DotNet = $dotNetFormat
+    }
+}
+
 function Get-OAuthToken {
     if ($env:CLAUDE_CODE_OAUTH_TOKEN) {
         return $env:CLAUDE_CODE_OAUTH_TOKEN
@@ -136,19 +186,31 @@ function Get-OAuthToken {
     return $null
 }
 
-function Format-ResetTime([string]$isoStr, [string]$style) {
+function Format-ResetTime([string]$isoStr, [string]$dotNetFormat, [bool]$trimHour = $false) {
     if (-not $isoStr -or $isoStr -eq "null") { return $null }
     try {
         $dt = [DateTimeOffset]::Parse($isoStr).LocalDateTime
-        switch ($style) {
-            "time"     { return $dt.ToString("h:mm") }
-            "datetime" { return $dt.ToString("MMM d h:mm") }
-            default    { return $dt.ToString("MMM d") }
+        $formatted = $dt.ToString($dotNetFormat, [System.Globalization.CultureInfo]::InvariantCulture)
+        if ($trimHour) {
+            $formatted = [regex]::Replace($formatted, '(^| )0(\d:)', '$1$2')
         }
+        return $formatted
     } catch {
         return $null
     }
 }
+
+function Test-FutureTime([string]$isoStr) {
+    if (-not $isoStr -or $isoStr -eq "null") { return $false }
+    try {
+        $dt = [DateTimeOffset]::Parse($isoStr)
+        return ($dt -gt [DateTimeOffset]::UtcNow)
+    } catch {
+        return $false
+    }
+}
+
+$sevenDayTimeFormat = Resolve-SevenDayTimeFormat $env:CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT
 
 function Get-GitStat([string]$repoPath) {
     $lines = @()
@@ -513,13 +575,17 @@ if ($usageData) {
         if ($usage.five_hour) {
             $usageAvailable = $true
             $fiveHourPct = [math]::Floor([double]$usage.five_hour.utilization)
-            $fiveHourReset = Format-ResetTime $usage.five_hour.resets_at "time"
-            $showFiveHourReset = [bool]$fiveHourReset
+            if (Test-FutureTime $usage.five_hour.resets_at) {
+                $fiveHourReset = Format-ResetTime $usage.five_hour.resets_at "HH:mm" $true
+                $showFiveHourReset = [bool]$fiveHourReset
+            }
 
             $sevenDayPct = [math]::Floor([double]$usage.seven_day.utilization)
-            $sevenDayReset = Format-ResetTime $usage.seven_day.resets_at "datetime"
-            $sevenDayDate = Format-ResetTime $usage.seven_day.resets_at "date"
-            $showSevenDayReset = [bool]$sevenDayReset
+            if (Test-FutureTime $usage.seven_day.resets_at) {
+                $sevenDayReset = Format-ResetTime $usage.seven_day.resets_at $sevenDayTimeFormat.DotNet
+                $sevenDayDate = Format-ResetTime $usage.seven_day.resets_at (Convert-FromStrftimeFormat $shortSevenDayDateFormat)
+                $showSevenDayReset = [bool]$sevenDayReset
+            }
 
             $extraEnabled = ($usage.extra_usage.is_enabled -eq $true)
             if ($extraEnabled) {
