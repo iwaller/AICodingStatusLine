@@ -1,245 +1,347 @@
-# AICodingStatusLine
+<p align="center">
+  <img src="screenshot.png" alt="AICodingStatusLine" width="100%">
+</p>
 
-AICodingStatusLine is a custom status line for [Claude Code](https://claude.com/claude-code) that displays model info, git context, token usage, and rate limits in either a compact single-line layout or a multi-line bars layout. It runs as an external shell command, so it does not slow down Claude Code or consume any extra tokens.
+<h1 align="center">AICodingStatusLine</h1>
 
-## Fork Notice
+<p align="center">
+  <strong>Claude Code 自定义状态栏</strong> — 在终端底部实时显示模型信息、Git 上下文、Token 用量与速率限制
+</p>
 
-This repository is a maintained fork of [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine), originally created by Daniel Oliveira.
+<p align="center">
+  <a href="#-快速安装">安装</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="#-布局与样式">布局</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="#-主题">主题</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="#%EF%B8%8F-完整配置参考">配置</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="#-常见问题">FAQ</a>
+</p>
 
-This fork keeps the original status line concept and cross-platform shell scripts, and adds project-specific enhancements such as:
+---
 
-- adaptive width handling
-- theme presets
-- optional multi-line `bars` layout
-- selectable `bars` glyph presets: `ascii`, `dots`, `squares`
-- PowerShell-safe glyph rendering for `dots` / `squares`
-- updated documentation and screenshots
+## Fork 说明
 
-Planned follow-up work:
+本仓库 fork 自 [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)（原作者 Daniel Oliveira），在保留原始状态栏概念和跨平台脚本的基础上增加了以下特性：
 
-- adapt the status line experience for Codex CLI
+- 自适应宽度裁剪
+- 主题色彩预设（`default` / `forest`）
+- 多行 `bars` 布局 + 可选进度条字符（`ascii` / `dots` / `squares`）
+- 自定义 7 天重置时间格式
+- 过期 reset 时间自动隐藏
+- PowerShell 安全的 Unicode 渲染
 
-## Current Changes
+---
 
-Current version highlights:
+## 状态栏段落说明
 
-- added `CLAUDE_CODE_STATUSLINE_BAR_STYLE` for `bars` layout
-- supports `ascii`, `dots`, and `squares`
-- unknown style values fall back to `ascii`
-- kept `compact` layout behavior unchanged
-- kept PowerShell compatibility by building non-ASCII bar glyphs from code points instead of source literals
+| 段落 | 含义 | 示例 |
+|------|------|------|
+| **Model** | 当前模型名称 | `Opus 4.6` |
+| **CWD@Branch** | 当前目录名 + Git 分支，仓库有改动时追加 `(+N -N)` | `myapp@main (+3 -1)` |
+| **ctx** | 已用 / 总计 Context Window Token 数 + 百分比 | `ctx 15k/200k 7%` |
+| **eff** | 推理努力等级 | `low` / `med` / `high` |
+| **5h** | 5 小时速率限制用量百分比 + 重置时间 | `5h 83% 2:00` |
+| **7d** | 7 天速率限制用量百分比 + 重置时间 | `7d 63% 03 06 08:00` |
+| **extra** | 额外用量积分（启用时才显示） | `extra $12.34/$20.00` |
 
-## Screenshots
+用量百分比按阈值变色：🟢 <50% → 🟡 ≥50% → 🟠 ≥70% → 🔴 ≥90%
 
-![Status Line Screenshot](screenshot.png)
+> 如果 reset 时间已过期（早于当前时间），状态栏会自动隐藏该时间，只显示百分比。
 
-### `dots` style
+---
 
-![Bars Dots Screenshot](screenshot-dots.png)
+## 🚀 快速安装
 
-### `squares` style
+### 方式一：让 Claude 帮你装（推荐）
 
-![Bars Squares Screenshot](screenshot-squares.png)
-
-## What it shows
-
-| Segment | Description |
-|---------|-------------|
-| **Model** | Current model name (e.g., Opus 4.6) |
-| **CWD@Branch** | Current folder name and git branch, with `(+/-)` only when the repo is dirty |
-| **ctx** | Used / total context window tokens plus usage percentage |
-| **eff** | Reasoning effort level (`low`, `med`, `high`) |
-| **5h** | 5-hour rate limit usage percentage and reset time or progress bar row |
-| **7d** | 7-day rate limit usage percentage and reset time or progress bar row |
-| **extra** | Extra usage credits spent / limit (if enabled) |
-
-Usage percentages are color-coded: green (<50%) -> yellow (>=50%) -> orange (>=70%) -> red (>=90%).
-
-## Layouts
-
-- `compact` is the default single-line layout
-- `bars` keeps the overview on the first line and renders `5h` / `7d` as their own progress-bar lines
-- `CLAUDE_CODE_STATUSLINE_BAR_STYLE` changes the bar glyph preset only for `bars` layout
-
-Example:
-
-```bash
-CLAUDE_CODE_STATUSLINE_LAYOUT=bars ~/.claude/statusline.sh
-```
-
-To make the layout persistent in Claude Code, add it under `env` in `~/.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"
-  }
-}
-```
-
-Bar style presets:
-
-- `ascii` -> `=` / `-` (default)
-- `dots` -> `●` / `○`
-- `squares` -> `■` / `□`
-
-Unknown values fall back to `ascii`.
-
-Example:
-
-```bash
-CLAUDE_CODE_STATUSLINE_LAYOUT=bars CLAUDE_CODE_STATUSLINE_BAR_STYLE=dots ~/.claude/statusline.sh
-```
-
-## Width Budget
-
-The status line now compacts itself to fit narrow terminals.
-
-- It keeps the core segments visible: model, git context, `ctx`, `eff`, and `5h`
-- It collapses in a fixed order: `extra` -> reset times -> git diff -> `7d` -> truncated git segment
-- You can force a deterministic width budget with `CLAUDE_CODE_STATUSLINE_MAX_WIDTH`
-- In `bars` layout, the overview line still compacts first, while the `5h` / `7d` rows preserve the bar and shorten time/date text before shrinking the bar itself
-
-Example:
-
-```bash
-CLAUDE_CODE_STATUSLINE_MAX_WIDTH=100 ~/.claude/statusline.sh
-```
-
-You can also switch ANSI palettes with `CLAUDE_CODE_STATUSLINE_THEME`.
-
-```bash
-CLAUDE_CODE_STATUSLINE_THEME=forest ~/.claude/statusline.sh
-```
-
-Supported theme values:
-
-- `default`
-- `forest`
-
-Unknown theme values fall back to `default`.
-
-You can combine layout, bar style, and theme:
-
-```bash
-CLAUDE_CODE_STATUSLINE_LAYOUT=bars CLAUDE_CODE_STATUSLINE_BAR_STYLE=squares CLAUDE_CODE_STATUSLINE_THEME=forest ~/.claude/statusline.sh
-```
-
-Persistent example:
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
-    "CLAUDE_CODE_STATUSLINE_BAR_STYLE": "squares",
-    "CLAUDE_CODE_STATUSLINE_THEME": "forest"
-  }
-}
-```
-
-## Requirements
-
-### macOS / Linux
-
-- `jq` — for JSON parsing
-- `curl` — for fetching usage data from the Anthropic API
-- Claude Code with OAuth authentication (Pro/Max subscription)
-
-### Windows
-
-- PowerShell 5.1+ (included by default on Windows 10/11)
-- `git` in PATH (for branch/diff info)
-- Claude Code with OAuth authentication (Pro/Max subscription)
-
-## Installation
-
-### Quick setup (recommended)
-
-Copy the contents of `statusline.sh` (or `statusline.ps1` on Windows) and paste it into Claude Code with the prompt:
+复制 `statusline.sh`（Windows 用 `statusline.ps1`）的全部内容，粘贴到 Claude Code 对话中并发送：
 
 > Use this script as my status bar
 
-Claude Code will save the script and configure `settings.json` for you automatically.
+Claude Code 会自动保存脚本并配置 `settings.json`，无需手动操作。
 
-### Manual setup — macOS / Linux
+---
 
-1. Copy the script to your Claude config directory:
+### 方式二：手动安装
 
-   ```bash
-   cp statusline.sh ~/.claude/statusline.sh
-   chmod +x ~/.claude/statusline.sh
-   ```
+#### macOS / Linux
 
-2. Add the status line config to `~/.claude/settings.json`:
+**前置依赖：**
 
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "~/.claude/statusline.sh"
-     }
-   }
-   ```
+| 工具 | 用途 |
+|------|------|
+| `jq` | 解析 JSON |
+| `curl` | 从 Anthropic API 获取用量数据 |
+| Claude Code | 需 OAuth 认证（Pro/Max 订阅） |
 
-3. Restart Claude Code.
+**步骤：**
 
-### Manual setup — Windows
+```bash
+# 1. 复制脚本到 Claude 配置目录
+cp statusline.sh ~/.claude/statusline.sh
+chmod +x ~/.claude/statusline.sh
 
-> **Windows users should use `statusline.ps1`** instead of the bash script.
+# 2. 配置 settings.json（如文件已存在，手动合并即可）
+cat <<'EOF' >> ~/.claude/settings.json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  }
+}
+EOF
 
-1. Copy the script to your Claude config directory:
+# 3. 重启 Claude Code
+```
 
-   ```powershell
-   Copy-Item statusline.ps1 "$env:USERPROFILE\.claude\statusline.ps1"
-   ```
+#### Windows
 
-2. Add the status line config to `%USERPROFILE%\.claude\settings.json`:
+> Windows 用户请使用 `statusline.ps1`，不要使用 bash 脚本。
 
-   **PowerShell / CMD:**
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "powershell -NoProfile -File \"%USERPROFILE%\\.claude\\statusline.ps1\""
-     }
-   }
-   ```
+**前置依赖：**
 
-   **Git Bash / WSL bash:**
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "powershell -NoProfile -File \"$USERPROFILE\\.claude\\statusline.ps1\""
-     }
-   }
-   ```
+| 工具 | 用途 |
+|------|------|
+| PowerShell 5.1+ | Windows 10/11 自带 |
+| `git` | 需在 PATH 中，用于分支/差异信息 |
+| Claude Code | 需 OAuth 认证（Pro/Max 订阅） |
 
-   > **Note:** Use `%USERPROFILE%` in CMD/PowerShell or `$USERPROFILE` in bash shells. The `%VAR%` syntax does not expand in bash.
+**步骤：**
 
-3. Restart Claude Code.
+```powershell
+# 1. 复制脚本
+Copy-Item statusline.ps1 "$env:USERPROFILE\.claude\statusline.ps1"
+```
 
-## Caching
+在 `%USERPROFILE%\.claude\settings.json` 中添加：
 
-Usage data from the Anthropic API is cached for 60 seconds at `/tmp/claude/statusline-usage-cache.json` to avoid excessive API calls.
+**PowerShell / CMD 环境：**
 
-## License
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "powershell -NoProfile -File \"%USERPROFILE%\\.claude\\statusline.ps1\""
+  }
+}
+```
+
+**Git Bash / WSL 环境：**
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "powershell -NoProfile -File \"$USERPROFILE\\.claude\\statusline.ps1\""
+  }
+}
+```
+
+> **注意：** CMD/PowerShell 中使用 `%USERPROFILE%`，bash 中使用 `$USERPROFILE`。两种语法不可混用。
+
+重启 Claude Code 即可生效。
+
+---
+
+## 🎨 布局与样式
+
+### 布局模式
+
+通过 `CLAUDE_CODE_STATUSLINE_LAYOUT` 切换：
+
+| 值 | 说明 |
+|----|------|
+| `compact` | **默认**。所有信息压缩在一行 |
+| `bars` | 概览信息在第一行，5h / 7d 各自渲染为带进度条的独立行 |
+
+### 进度条字符（仅 `bars` 布局生效）
+
+通过 `CLAUDE_CODE_STATUSLINE_BAR_STYLE` 切换：
+
+| 值 | 填充 / 空白 | 效果 |
+|----|-------------|------|
+| `ascii` | `=` / `-` | **默认**，最大兼容性 |
+| `dots` | `●` / `○` | 圆点风格 |
+| `squares` | `■` / `□` | 方块风格 |
+
+未知值自动回退到 `ascii`。
+
+### 截图对比
+
+**`dots` 风格：**
+
+![Bars Dots Screenshot](screenshot-dots.png)
+
+**`squares` 风格：**
+
+![Bars Squares Screenshot](screenshot-squares.png)
+
+---
+
+## 🖌 主题
+
+通过 `CLAUDE_CODE_STATUSLINE_THEME` 切换 ANSI 配色方案：
+
+| 值 | 风格 |
+|----|------|
+| `default` | **默认**。蓝色主调，高对比度 |
+| `forest` | 绿色主调，柔和自然 |
+
+未知值自动回退到 `default`。
+
+### 配色对照
+
+| 色彩角色 | `default` | `forest` |
+|----------|-----------|----------|
+| 主强调色 | 蓝 `#4DA6FF` | 绿 `#78C478` |
+| Teal | `#4DAFB0` | `#5EAA96` |
+| 分支名 | `#C4D0D4` | `#D6E0CD` |
+| 弱化文字 | `#73848B` | `#84907C` |
+
+---
+
+## ⚙️ 完整配置参考
+
+所有配置通过环境变量控制，可在终端临时设置，也可写入 `settings.json` 持久化。
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `CLAUDE_CODE_STATUSLINE_LAYOUT` | `compact` | 布局模式：`compact` 或 `bars` |
+| `CLAUDE_CODE_STATUSLINE_BAR_STYLE` | `ascii` | 进度条字符：`ascii`、`dots`、`squares` |
+| `CLAUDE_CODE_STATUSLINE_THEME` | `default` | 配色主题：`default`、`forest` |
+| `CLAUDE_CODE_STATUSLINE_MAX_WIDTH` | 终端宽度 | 强制指定宽度预算（正整数） |
+| `CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT` | `%m %d %H:%M` | 自定义 7d 重置时间格式 |
+
+### 7d 时间格式支持的 strftime 标记
+
+| 标记 | 含义 | 示例 |
+|------|------|------|
+| `%y` | 两位年份 | `26` |
+| `%Y` | 四位年份 | `2026` |
+| `%m` | 月（补零） | `03` |
+| `%d` | 日（补零） | `06` |
+| `%H` | 时（24h，补零） | `08` |
+| `%M` | 分（补零） | `00` |
+| `%b` | 缩写月名 | `Mar` |
+| `%B` | 完整月名 | `March` |
+
+无效格式自动回退到 `%m %d %H:%M`。
+
+### 持久化配置示例
+
+在 `~/.claude/settings.json` 的 `env` 字段中添加：
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "env": {
+    "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
+    "CLAUDE_CODE_STATUSLINE_BAR_STYLE": "dots",
+    "CLAUDE_CODE_STATUSLINE_THEME": "forest",
+    "CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT": "%b %d %H:%M"
+  }
+}
+```
+
+---
+
+## 📐 宽度自适应
+
+状态栏会根据终端宽度自动裁剪，按以下优先级逐步缩减：
+
+| 优先级 | 操作 |
+|--------|------|
+| 1 | 移除 `extra` 段落 |
+| 2 | 隐藏 7d 重置时间 |
+| 3 | 隐藏 5h 重置时间 |
+| 4 | 隐藏 Git diff 统计 |
+| 5 | 移除整个 7d 段落 |
+| 6 | 用 `...` 截断 Git 段落 |
+
+在 `bars` 布局中，概览行先裁剪；5h / 7d 进度条行会先缩短时间文本，最后才缩小进度条宽度。
+
+可通过 `CLAUDE_CODE_STATUSLINE_MAX_WIDTH` 强制指定宽度：
+
+```bash
+CLAUDE_CODE_STATUSLINE_MAX_WIDTH=80 ~/.claude/statusline.sh
+```
+
+---
+
+## 📦 缓存机制
+
+API 用量数据缓存 60 秒，避免频繁请求：
+
+| 平台 | 缓存路径 |
+|------|----------|
+| macOS / Linux | `/tmp/claude/statusline-usage-cache.json` |
+| Windows | `%TEMP%\claude\statusline-usage-cache.json` |
+
+---
+
+## 🧪 测试
+
+```bash
+# 运行完整测试套件
+python3 -m unittest discover -s tests -p "test_*.py"
+
+# 运行单个测试
+python3 -m unittest tests.test_statusline.StatusLineTests.test_wide_budget_keeps_all_segments
+
+# Bash 冒烟测试
+printf '%s' '{"cwd":"/tmp","model":{"display_name":"Opus 4.6"}}' | ./statusline.sh
+
+# PowerShell 冒烟测试
+pwsh -NoProfile -File ./statusline.ps1 < sample.json
+```
+
+---
+
+## ❓ 常见问题
+
+<details>
+<summary><strong>状态栏显示 <code>5h -</code> / <code>7d -</code>，没有用量数据？</strong></summary>
+
+确认你的 Claude Code 使用的是 OAuth 认证（Pro/Max 订阅）。API key 模式不支持用量查询。如果认证正常，可能是 API 暂时不可达，60 秒后会重新尝试。
+</details>
+
+<details>
+<summary><strong>reset 时间没有显示？</strong></summary>
+
+如果 API 返回的重置时间已过期（早于当前时间），状态栏会自动隐藏该时间，只保留百分比显示。这是预期行为。
+</details>
+
+<details>
+<summary><strong>终端宽度不够，段落被截断了？</strong></summary>
+
+这是宽度自适应功能的正常表现。可以加宽终端窗口，或通过 `CLAUDE_CODE_STATUSLINE_MAX_WIDTH` 手动指定更大的宽度预算。
+</details>
+
+<details>
+<summary><strong>Windows 下进度条乱码？</strong></summary>
+
+PowerShell 脚本使用代码点构建 Unicode 字符，不依赖源文件编码。如果仍有问题，使用默认的 `ascii` 风格（`=` / `-`）即可正常显示。
+</details>
+
+<details>
+<summary><strong>如何完全不显示 bars 进度条？</strong></summary>
+
+将布局设为 `compact`（默认值），所有信息会压缩在一行内显示。
+</details>
+
+---
+
+## 📄 License
 
 MIT
 
-## Author
+## 作者
 
-### Original Author
+**原作者：** Daniel Oliveira — [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)
 
-Daniel Oliveira
-
-Original repository:
-[daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)
-
-### This Fork
-
-Maintained in:
-[kaelinda/AICodingStatusLine](https://github.com/kaelinda/AICodingStatusLine)
+**本 Fork 维护于：** [kaelinda/AICodingStatusLine](https://github.com/kaelinda/AICodingStatusLine)
 
 [![Website](https://img.shields.io/badge/Website-FF6B6B?style=for-the-badge&logo=safari&logoColor=white)](https://danielapoliveira.com/)
 [![X](https://img.shields.io/badge/X-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/daniel_not_nerd)
