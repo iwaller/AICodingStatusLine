@@ -86,10 +86,11 @@ class StatusLineTests(unittest.TestCase):
         env["HOME"] = str(self.cache_home)
         env["TZ"] = "UTC"
         env["CLAUDE_CODE_EFFORT_LEVEL"] = "low"
+        for key in list(env):
+            if key.startswith("CLAUDE_CODE_STATUSLINE_"):
+                del env[key]
         if budget is not None:
             env["CLAUDE_CODE_STATUSLINE_MAX_WIDTH"] = str(budget)
-        else:
-            env.pop("CLAUDE_CODE_STATUSLINE_MAX_WIDTH", None)
         if extra_env:
             env.update(extra_env)
 
@@ -128,10 +129,11 @@ class StatusLineTests(unittest.TestCase):
         env["USERPROFILE"] = str(self.cache_home)
         env["TZ"] = "UTC"
         env["CLAUDE_CODE_EFFORT_LEVEL"] = "low"
+        for key in list(env):
+            if key.startswith("CLAUDE_CODE_STATUSLINE_"):
+                del env[key]
         if budget is not None:
             env["CLAUDE_CODE_STATUSLINE_MAX_WIDTH"] = str(budget)
-        else:
-            env.pop("CLAUDE_CODE_STATUSLINE_MAX_WIDTH", None)
         if extra_env:
             env.update(extra_env)
 
@@ -228,6 +230,9 @@ class StatusLineTests(unittest.TestCase):
             "monokai": "[38;2;102;217;239m",
             "solarized": "[38;2;38;139;210m",
             "ocean": "[38;2;0;188;212m",
+            "sunset": "[38;2;255;138;101m",
+            "amber": "[38;2;255;193;7m",
+            "rose": "[38;2;244;143;177m",
         }
         for theme, marker in theme_accent_markers.items():
             raw = self._run_shell(
