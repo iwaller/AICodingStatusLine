@@ -1,6 +1,6 @@
-# Claude Code Status Line
+# AICodingStatusLine
 
-A custom status line for [Claude Code](https://claude.com/claude-code) that displays model info, git context, token usage, and rate limits in either a compact single-line layout or a multi-line bars layout. It runs as an external shell command, so it does not slow down Claude Code or consume any extra tokens.
+AICodingStatusLine is a custom status line for [Claude Code](https://claude.com/claude-code) that displays model info, git context, token usage, and rate limits in either a compact single-line layout or a multi-line bars layout. It runs as an external shell command, so it does not slow down Claude Code or consume any extra tokens.
 
 ## Fork Notice
 
@@ -12,6 +12,10 @@ This fork keeps the original status line concept and cross-platform shell script
 - theme presets
 - optional multi-line `bars` layout
 - updated documentation and screenshots
+
+Planned follow-up work:
+
+- adapt the status line experience for Codex CLI
 
 ## Screenshot
 
