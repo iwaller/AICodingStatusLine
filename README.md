@@ -2,6 +2,17 @@
 
 A custom status line for [Claude Code](https://claude.com/claude-code) that displays model info, git context, token usage, and rate limits in either a compact single-line layout or a multi-line bars layout. It runs as an external shell command, so it does not slow down Claude Code or consume any extra tokens.
 
+## Fork Notice
+
+This repository is a maintained fork of [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine), originally created by Daniel Oliveira.
+
+This fork keeps the original status line concept and cross-platform shell scripts, and adds project-specific enhancements such as:
+
+- adaptive width handling
+- theme presets
+- optional multi-line `bars` layout
+- updated documentation and screenshots
+
 ## Screenshot
 
 ![Status Line Screenshot](screenshot.png)
@@ -178,7 +189,17 @@ MIT
 
 ## Author
 
+### Original Author
+
 Daniel Oliveira
+
+Original repository:
+[daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)
+
+### This Fork
+
+Maintained in:
+[kaelinda/AICodingStatusLine](https://github.com/kaelinda/AICodingStatusLine)
 
 [![Website](https://img.shields.io/badge/Website-FF6B6B?style=for-the-badge&logo=safari&logoColor=white)](https://danielapoliveira.com/)
 [![X](https://img.shields.io/badge/X-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/daniel_not_nerd)
