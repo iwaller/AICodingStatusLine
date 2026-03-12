@@ -54,7 +54,7 @@ cd AICodingStatusLine
 
 ## 🟢 Codex CLI
 
-Codex CLI 没有原生 statusLine 扩展点，本项目通过 `tmux` 包装层实现功能丰富的底部状态栏。从 session JSONL 读取 token 用量和 5h/2w 速率限制。
+Codex CLI 没有原生 statusLine 扩展点，本项目通过 `tmux` 包装层实现功能丰富的底部状态栏。从 session JSONL 读取 token 用量和 5h / weekly 剩余额度。
 
 **快速安装：**
 
@@ -73,9 +73,17 @@ codex-tmux               # 需要 ~/.codex/bin 在 PATH 中
 ~/.codex/bin/codex-tmux   # 或使用完整路径
 ```
 
-**显示内容：** 模型名 | Git 分支(+N -N) | ctx 使用率 | 推理努力 | 5h 限制 | 2w 限制
+**显示内容：** 模型名 | Git 分支(+N -N) | ctx 使用率 | 推理努力 | 5h 剩余额度 | weekly 剩余额度
 
 **配置方式：** 通过 `~/.codex/config.toml` 的 `[statusline]` 段落持久化配置。
+
+> Codex 中 `5h` 和 `weekly` 都显示剩余额度；`weekly` 会带绝对重置时间，默认例如 `weekly 96% left 3/25 0:00 reset`，并继续支持自定义时间格式。
+
+**示例输出：**
+
+```text
+gpt-5.4 | myapp@main | ctx 89k/258k 34% | eff high | 5h 86% left 8:00 | weekly 96% left 3/25 0:00 reset
+```
 
 ```toml
 [statusline]
@@ -109,7 +117,7 @@ bar_style = "blocks"
 | 值 | 说明 | Claude Code 环境变量 | Codex 环境变量 / config.toml |
 |----|------|---------------------|------------------------------|
 | `compact` | **默认**。所有信息压缩在一行 | `CLAUDE_CODE_STATUSLINE_LAYOUT` | `CODEX_STATUSLINE_LAYOUT` / `layout` |
-| `bars` | 概览行 + 5h 进度条行 + 7d/2w 进度条行 | 同上 | 同上 |
+| `bars` | 概览行 + 5h 进度条行 + 长周期进度条行（Claude 为 `7d`，Codex 为 `weekly`） | 同上 | 同上 |
 
 ### 进度条样式（仅 `bars` 布局生效）
 
@@ -185,10 +193,10 @@ bar_style = "blocks"
 | 优先级 | 操作 |
 |--------|------|
 | 1 | 移除 `extra` 段落（仅 Claude Code） |
-| 2 | 隐藏 7d/2w 重置时间 |
+| 2 | 隐藏长周期时间信息（Claude 的 `7d` / Codex 的 `weekly`） |
 | 3 | 隐藏 5h 重置时间 |
 | 4 | 隐藏 Git diff 统计 |
-| 5 | 移除整个 7d/2w 段落 |
+| 5 | 移除整个长周期段落（Claude 的 `7d` / Codex 的 `weekly`） |
 | 6 | 用 `...` 截断 Git 段落 |
 
 ---
@@ -197,7 +205,7 @@ bar_style = "blocks"
 
 ```bash
 # 运行完整测试套件
-python3 -m pytest tests/test_statusline.py
+python3 -m unittest tests/test_statusline.py
 
 # 运行单个测试
 python3 -m unittest tests.test_statusline.StatusLineTests.test_wide_budget_keeps_all_segments
@@ -214,16 +222,18 @@ CODEX_MODEL_NAME=gpt-5.4 ./codex_statusline.sh .
 ## ❓ 常见问题
 
 <details>
-<summary><strong>状态栏显示 <code>5h -</code> / <code>7d -</code>（或 <code>2w -</code>），没有用量数据？</strong></summary>
+<summary><strong>状态栏显示 <code>5h -</code> / <code>7d -</code>（或 <code>weekly -</code>），bars 布局还显示 <code>unavailable</code>？</strong></summary>
 
 - **Claude Code**：确认使用 OAuth 认证（Pro/Max 订阅），API key 模式不支持用量查询。
-- **Codex CLI**：确认 `~/.codex/sessions/` 目录下有 `.jsonl` 文件，需至少运行过一次对话。
+- **Codex CLI**：确认 `~/.codex/sessions/` 目录下有 `.jsonl` 文件，需至少运行过一次对话。较新的 session 可能只有 token 统计、没有 `rate_limits`，这时 `bars` 布局会显示 `5h unavailable` / `weekly unavailable`，表示数据源缺失，不是渲染错误。
 </details>
 
 <details>
 <summary><strong>reset 时间没有显示？</strong></summary>
 
 如果重置时间已过期（早于当前时间），状态栏会自动隐藏该时间，只保留百分比显示。这是预期行为。
+
+Codex 的 `weekly` 段落显示为绝对重置时间；默认格式类似 `3/25 0:00 reset`，宽度不足时会自动降级为短日期 `3/25`，窗口已过期时会隐藏该时间。
 </details>
 
 <details>

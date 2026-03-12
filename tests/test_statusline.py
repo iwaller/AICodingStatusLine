@@ -20,6 +20,11 @@ DOTS_BAR_RE = r"[\u25cf\u25cb]+"
 DEFAULT_7D_TIME = "03 06 08:00"
 DEFAULT_7D_SHORT_DATE = "03 06"
 CUSTOM_7D_TIME = "99-03-06 08:00"
+CODEX_2W_TIME = "3/25 0:00 reset"
+CODEX_2W_SHORT_DATE = "3/25"
+CUSTOM_CODEX_2W_TIME = "26-03-25 00:00"
+CODEX_5H_LEFT = 86
+CODEX_WEEKLY_LEFT = 96
 CODEX_TMUX_LAUNCHER_NAME = "codex-tmux"
 CODEX_TMUX_STATUS_NAME = "codex-tmux-status"
 CODEX_STATUSLINE_NAME = "codex-statusline"
@@ -48,8 +53,8 @@ CODEX_TOKEN_COUNT_EVENT = {
             },
             "secondary": {
                 "used_percent": 4.0,
-                "window_minutes": 10081,
-                "resets_at": 4102444800,
+                "window_minutes": 20161,
+                "resets_at": 1774396800,
             },
             "credits": None,
             "plan_type": "plus",
@@ -752,11 +757,29 @@ class CodexStatusLineTests(unittest.TestCase):
 
     def test_codex_five_hour_segment(self):
         output = self._run_codex(budget=150)
-        self.assertIn("5h 14%", output)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
 
     def test_codex_seven_day_segment(self):
         output = self._run_codex(budget=150)
-        self.assertIn("2w 4%", output)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", output)
+
+    def test_codex_two_week_segment_shows_absolute_reset_time(self):
+        output = self._run_codex(budget=150)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left {CODEX_2W_TIME}", output)
+
+    def test_codex_custom_two_week_time_format_applies_in_compact_layout(self):
+        output = self._run_codex(
+            budget=150,
+            extra_env={"CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT": "%y-%m-%d %H:%M"},
+        )
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left {CUSTOM_CODEX_2W_TIME}", output)
+
+    def test_codex_invalid_two_week_time_format_falls_back_to_default(self):
+        output = self._run_codex(
+            budget=150,
+            extra_env={"CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT": "%q-%m"},
+        )
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left {CODEX_2W_TIME}", output)
 
     def test_codex_rate_limits_null(self):
         """When rate_limits.primary is null, show placeholder."""
@@ -764,7 +787,7 @@ class CodexStatusLineTests(unittest.TestCase):
         session_file.write_text(json.dumps(CODEX_TOKEN_COUNT_NULL_LIMITS) + "\n")
         output = self._run_codex(budget=150, write_session=False)
         self.assertIn("5h -", output)
-        self.assertIn("2w -", output)
+        self.assertIn("weekly -", output)
 
     def test_codex_wide_budget_all_segments(self):
         output = self._run_codex(budget=150)
@@ -772,8 +795,8 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("codex-repo@feat/codex-test", output)
         self.assertIn("ctx 89k/258k 34%", output)
         self.assertIn("eff high", output)
-        self.assertIn("5h 14%", output)
-        self.assertIn("2w 4%", output)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", output)
         self.assertLessEqual(len(output), 150)
 
     def test_codex_narrow_budget_truncation(self):
@@ -781,10 +804,16 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("gpt-5.4", output)
         self.assertIn("ctx 89k/258k 34%", output)
         self.assertIn("eff high", output)
-        self.assertIn("5h 14%", output)
-        # 2w should be dropped at narrow width
-        self.assertNotIn("2w ", output)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
+        # weekly should be dropped at narrow width
+        self.assertNotIn("weekly ", output)
         self.assertLessEqual(len(output), 60)
+
+    def test_codex_remaining_usage_colors_follow_left_percent(self):
+        raw_output = self._run_codex(budget=150, raw=True)
+
+        self.assertIn(f"5h\x1b[0m \x1b[38;2;0;160;0m{CODEX_5H_LEFT}% left", raw_output)
+        self.assertIn(f"weekly\x1b[0m \x1b[38;2;0;160;0m{CODEX_WEEKLY_LEFT}% left", raw_output)
 
     def test_codex_theme_changes_ansi_only(self):
         default_raw = self._run_codex(budget=150, raw=True)
@@ -810,9 +839,32 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("ctx 89k/258k 34%", lines[0])
         self.assertIn("eff high", lines[0])
         self.assertNotIn("5h ", lines[0])
-        self.assertNotIn("2w ", lines[0])
-        self.assertRegex(lines[1], r"^5h 14% \[[=\-]+\]")
-        self.assertRegex(lines[2], r"^2w 4% \[[=\-]+\]")
+        self.assertNotIn("weekly ", lines[0])
+        self.assertRegex(lines[1], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\]")
+        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+
+    def test_codex_bars_layout_uses_custom_two_week_time_format(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT": "%y-%m-%d %H:%M",
+            },
+        )
+        lines = output.splitlines()
+        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CUSTOM_CODEX_2W_TIME)}$")
+
+    def test_codex_bars_layout_narrow_width_keeps_two_week_absolute_time(self):
+        output = self._run_codex(
+            budget=44,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT": "%y-%m-%d %H:%M",
+            },
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\]( {re.escape(CODEX_2W_SHORT_DATE)})?$")
 
     def test_codex_no_session_graceful(self):
         """No session file at all — should not crash."""
@@ -820,7 +872,7 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("gpt-5.4", output)
         self.assertIn("ctx 0/0 0%", output)
         self.assertIn("5h -", output)
-        self.assertIn("2w -", output)
+        self.assertIn("weekly -", output)
 
     def test_codex_git_dirty_diff(self):
         (self.repo / "tracked.txt").write_text("base\nchange\n")
@@ -835,6 +887,7 @@ class CodexStatusLineTests(unittest.TestCase):
         output = self._run_codex(budget=150, write_session=False)
         self.assertIn("gpt-5.4", output)
         self.assertIn("5h -", output)
+        self.assertIn("weekly -", output)
 
     def test_codex_no_extra_segment(self):
         """Codex should never show extra usage segment."""
@@ -849,8 +902,22 @@ class CodexStatusLineTests(unittest.TestCase):
         )
         lines = output.splitlines()
         self.assertEqual(3, len(lines))
-        self.assertEqual("5h -- [----------] n/a", lines[1])
-        self.assertEqual("2w -- [----------] n/a", lines[2])
+        self.assertEqual("5h unavailable", lines[1])
+        self.assertEqual("weekly unavailable", lines[2])
+
+    def test_codex_bars_layout_null_rate_limits_uses_unavailable_copy(self):
+        session_file = self.session_dir / "rollout-test.jsonl"
+        session_file.write_text(json.dumps(CODEX_TOKEN_COUNT_NULL_LIMITS) + "\n")
+
+        output = self._run_codex(
+            budget=120,
+            write_session=False,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertEqual("5h unavailable", lines[1])
+        self.assertEqual("weekly unavailable", lines[2])
 
     def test_codex_bars_layout_dots_style(self):
         output = self._run_codex(

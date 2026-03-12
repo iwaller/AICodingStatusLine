@@ -139,8 +139,10 @@ fi
 
 sep_plain=' | '
 sep_text=" ${dim}|${reset} "
+default_two_week_time_format='%-m/%-d %-H:%M reset'
 seven_day_time_format='%m %d %H:%M'
-short_seven_day_date_format='%m %d'
+short_seven_day_date_format='%-m/%-d'
+weekly_label='weekly'
 
 SEG_TEXT=""
 SEG_PLAIN=""
@@ -168,6 +170,22 @@ resolve_effort() {
         e=$(grep '^model_reasoning_effort\s*=' "$config_file" 2>/dev/null | head -1 | sed 's/^model_reasoning_effort[[:space:]]*=[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/')
     fi
     printf "%s" "${e:-medium}"
+}
+
+is_valid_two_week_time_format() {
+    local value="$1"
+    [[ "$value" =~ ^(%[yYmdHMbB]|[[:space:]/:-])+$ ]]
+}
+
+resolve_two_week_time_format() {
+    local requested="$1"
+
+    if [ -n "$requested" ] && is_valid_two_week_time_format "$requested"; then
+        printf "%s" "$requested"
+        return
+    fi
+
+    printf "%s" "$default_two_week_time_format"
 }
 
 find_latest_session() {
@@ -208,6 +226,7 @@ parse_session_data() {
 
     local parsed
     parsed=$(printf '%s' "$line" | jq -c '{
+        event_ts: .timestamp,
         input: .payload.info.total_token_usage.input_tokens,
         cached: .payload.info.total_token_usage.cached_input_tokens,
         output: .payload.info.total_token_usage.output_tokens,
@@ -229,6 +248,61 @@ parse_session_data() {
 }
 
 # ── Shared rendering functions (ported from statusline.sh) ───────
+
+iso_to_epoch() {
+    local iso_str="$1"
+    local epoch
+
+    epoch=$(date -d "${iso_str}" +%s 2>/dev/null)
+    if [ -n "$epoch" ]; then
+        printf "%s" "$epoch"
+        return 0
+    fi
+
+    local stripped="${iso_str%%.*}"
+    stripped="${stripped%%Z}"
+    stripped="${stripped%%+*}"
+    stripped="${stripped%%-[0-9][0-9]:[0-9][0-9]}"
+
+    if [[ "$iso_str" == *"Z"* ]] || [[ "$iso_str" == *"+00:00"* ]] || [[ "$iso_str" == *"-00:00"* ]]; then
+        epoch=$(env TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+    else
+        epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+    fi
+
+    if [ -n "$epoch" ]; then
+        printf "%s" "$epoch"
+        return 0
+    fi
+
+    return 1
+}
+
+resolve_now_epoch() {
+    if [[ "${CODEX_STATUSLINE_NOW_EPOCH:-}" =~ ^[0-9]+$ ]]; then
+        printf "%s" "$CODEX_STATUSLINE_NOW_EPOCH"
+        return 0
+    fi
+
+    if [ -n "${session_event_epoch:-}" ] && [ "$session_event_epoch" -gt 0 ] 2>/dev/null; then
+        printf "%s" "$session_event_epoch"
+        return 0
+    fi
+
+    date +%s
+}
+
+format_epoch_time() {
+    local target_epoch="$1"
+    local format_string="$2"
+
+    if [ -z "$target_epoch" ] || [ -z "$format_string" ]; then
+        return
+    fi
+
+    date -r "$target_epoch" +"$format_string" 2>/dev/null || \
+    date -d "@$target_epoch" +"$format_string" 2>/dev/null
+}
 
 format_tokens() {
     local num=$1
@@ -252,6 +326,30 @@ usage_color() {
     else
         printf "%s" "$green"
     fi
+}
+
+remaining_color() {
+    local pct=$1
+    if [ "$pct" -le 10 ]; then
+        printf "%s" "$red"
+    elif [ "$pct" -le 30 ]; then
+        printf "%s" "$orange"
+    elif [ "$pct" -le 50 ]; then
+        printf "%s" "$yellow"
+    else
+        printf "%s" "$green"
+    fi
+}
+
+remaining_percent() {
+    local used=$1
+    local left=$(( 100 - used ))
+
+    if [ "$left" -lt 0 ]; then
+        left=0
+    fi
+
+    printf "%s" "$left"
 }
 
 is_positive_int() {
@@ -394,10 +492,11 @@ build_five_hour_segment() {
         return
     fi
 
-    local pct_color
-    pct_color=$(usage_color "$five_hour_pct")
-    SEG_PLAIN="5h ${five_hour_pct}%"
-    SEG_TEXT="${dim}5h${reset} ${pct_color}${five_hour_pct}%${reset}"
+    local pct_color pct_text
+    pct_text="${five_hour_remaining_pct}% left"
+    pct_color=$(remaining_color "$five_hour_remaining_pct")
+    SEG_PLAIN="5h ${pct_text}"
+    SEG_TEXT="${dim}5h${reset} ${pct_color}${pct_text}${reset}"
     if [ "$show_five_hour_reset" -eq 1 ] && [ -n "$five_hour_reset" ]; then
         SEG_PLAIN+=" ${five_hour_reset}"
         SEG_TEXT+=" ${dim}${five_hour_reset}${reset}"
@@ -406,15 +505,16 @@ build_five_hour_segment() {
 
 build_seven_day_segment() {
     if [ "$usage_available" -ne 1 ]; then
-        SEG_PLAIN="2w -"
-        SEG_TEXT="${dim}2w${reset} ${dim}-${reset}"
+        SEG_PLAIN="${weekly_label} -"
+        SEG_TEXT="${dim}${weekly_label}${reset} ${dim}-${reset}"
         return
     fi
 
-    local pct_color
-    pct_color=$(usage_color "$seven_day_pct")
-    SEG_PLAIN="2w ${seven_day_pct}%"
-    SEG_TEXT="${dim}2w${reset} ${pct_color}${seven_day_pct}%${reset}"
+    local pct_color pct_text
+    pct_text="${seven_day_remaining_pct}% left"
+    pct_color=$(remaining_color "$seven_day_remaining_pct")
+    SEG_PLAIN="${weekly_label} ${pct_text}"
+    SEG_TEXT="${dim}${weekly_label}${reset} ${pct_color}${pct_text}${reset}"
     if [ "$show_seven_day_reset" -eq 1 ] && [ -n "$seven_day_reset" ]; then
         SEG_PLAIN+=" ${seven_day_reset}"
         SEG_TEXT+=" ${dim}${seven_day_reset}${reset}"
@@ -519,7 +619,7 @@ build_usage_bar_line() {
         time_text=""
     fi
 
-    if [ "$label" = "2w" ]; then
+    if [ "$label" = "$weekly_label" ]; then
         if [ "$max_width" -le 44 ]; then
             time_text="$short_time"
         elif [ "$max_width" -le 52 ] && [ -n "$short_time" ]; then
@@ -559,7 +659,7 @@ build_usage_bar_line() {
         time_color="$branch"
         filled_text="${muted}${filled_plain}${reset}"
     else
-        pct_color=$(usage_color "$pct_value")
+        pct_color=$(remaining_color "$pct_value")
         time_color="$muted"
         filled_text="${pct_color}${filled_plain}${reset}"
     fi
@@ -573,6 +673,12 @@ build_usage_bar_line() {
     fi
 }
 
+build_usage_unavailable_line() {
+    local label="$1"
+    LINE_PLAIN="${label} unavailable"
+    LINE_TEXT="${dim}${label}${reset} ${muted}unavailable${reset}"
+}
+
 render_bars_output() {
     local full_five_time="$five_hour_reset"
     local full_seven_time="$seven_day_reset"
@@ -582,16 +688,16 @@ render_bars_output() {
     local top_line="$OUTPUT_TEXT"
 
     if [ "$usage_available" -eq 1 ]; then
-        build_usage_bar_line "5h" "$five_hour_pct" "${five_hour_pct}%" "$full_five_time" ""
+        build_usage_bar_line "5h" "$five_hour_remaining_pct" "${five_hour_remaining_pct}% left" "$full_five_time" ""
     else
-        build_usage_bar_line "5h" 0 "--" "n/a" ""
+        build_usage_unavailable_line "5h"
     fi
     local five_line="$LINE_TEXT"
 
     if [ "$usage_available" -eq 1 ]; then
-        build_usage_bar_line "2w" "$seven_day_pct" "${seven_day_pct}%" "$full_seven_time" "$short_seven_time"
+        build_usage_bar_line "$weekly_label" "$seven_day_remaining_pct" "${seven_day_remaining_pct}% left" "$full_seven_time" "$short_seven_time"
     else
-        build_usage_bar_line "2w" 0 "--" "n/a" ""
+        build_usage_unavailable_line "$weekly_label"
     fi
     local seven_line="$LINE_TEXT"
 
@@ -602,6 +708,7 @@ render_bars_output() {
 
 model_name=$(resolve_model)
 effort_level=$(resolve_effort)
+two_week_time_format=$(resolve_two_week_time_format "${CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT:-$(_toml_get two_week_time_format "")}")
 
 display_dir="${target_dir##*/}"
 git_branch=""
@@ -625,8 +732,10 @@ show_git_diff=0
 git_truncate_width=0
 
 five_hour_pct=0
+five_hour_remaining_pct=0
 five_hour_reset=""
 seven_day_pct=0
+seven_day_remaining_pct=0
 seven_day_reset=""
 seven_day_date=""
 
@@ -638,6 +747,8 @@ total_tokens="0"
 
 session_json=$(parse_session_data 2>/dev/null) || session_json=""
 if [ -n "$session_json" ]; then
+    session_event_ts=$(printf '%s' "$session_json" | jq -r '.event_ts // empty')
+    session_event_epoch=$(iso_to_epoch "$session_event_ts" 2>/dev/null) || session_event_epoch=""
     ctx_total=$(printf '%s' "$session_json" | jq -r '.total // 0')
     ctx_window=$(printf '%s' "$session_json" | jq -r '.window // 0')
     if [ "$ctx_window" -gt 0 ] 2>/dev/null; then
@@ -650,21 +761,21 @@ if [ -n "$session_json" ]; then
     if [ "$has_limits" = "true" ]; then
         usage_available=1
         five_hour_pct=$(printf '%s' "$session_json" | jq -r '.primary_pct // 0' | awk '{printf "%.0f", $1}')
+        five_hour_remaining_pct=$(remaining_percent "$five_hour_pct")
         five_hour_reset_epoch=$(printf '%s' "$session_json" | jq -r '.primary_reset // 0')
         seven_day_pct=$(printf '%s' "$session_json" | jq -r '.secondary_pct // 0' | awk '{printf "%.0f", $1}')
+        seven_day_remaining_pct=$(remaining_percent "$seven_day_pct")
         seven_day_reset_epoch=$(printf '%s' "$session_json" | jq -r '.secondary_reset // 0')
 
-        now=$(date +%s)
+        now=$(resolve_now_epoch)
         if [ "$five_hour_reset_epoch" -gt "$now" ] 2>/dev/null; then
             five_hour_reset=$(date -r "$five_hour_reset_epoch" +"%H:%M" 2>/dev/null || \
                               date -d "@$five_hour_reset_epoch" +"%H:%M" 2>/dev/null) || true
             [ -n "$five_hour_reset" ] && show_five_hour_reset=1
         fi
         if [ "$seven_day_reset_epoch" -gt "$now" ] 2>/dev/null; then
-            seven_day_reset=$(date -r "$seven_day_reset_epoch" +"$seven_day_time_format" 2>/dev/null || \
-                              date -d "@$seven_day_reset_epoch" +"$seven_day_time_format" 2>/dev/null) || true
-            seven_day_date=$(date -r "$seven_day_reset_epoch" +"$short_seven_day_date_format" 2>/dev/null || \
-                             date -d "@$seven_day_reset_epoch" +"$short_seven_day_date_format" 2>/dev/null) || true
+            seven_day_reset=$(format_epoch_time "$seven_day_reset_epoch" "$two_week_time_format")
+            seven_day_date=$(format_epoch_time "$seven_day_reset_epoch" "$short_seven_day_date_format")
             [ -n "$seven_day_reset" ] && show_seven_day_reset=1
         fi
     fi
@@ -673,7 +784,7 @@ fi
 [ -n "$git_stat" ] && show_git_diff=1
 max_width=$(get_max_width)
 
-# --line N: output a single line from bars layout (1=overview, 2=5h, 3=2w)
+# --line N: output a single line from bars layout (1=overview, 2=5h, 3=weekly)
 if [ "$line_select" -gt 0 ] 2>/dev/null; then
     # Force bars rendering, then extract requested line
     render_bars_output
