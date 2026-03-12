@@ -789,6 +789,38 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("5h -", output)
         self.assertIn("weekly -", output)
 
+    def test_codex_falls_back_to_recent_non_null_rate_limits_from_older_session(self):
+        older_dir = self.codex_home / "sessions" / "2026" / "03" / "10"
+        older_dir.mkdir(parents=True)
+        (older_dir / "rollout-older.jsonl").write_text(json.dumps(CODEX_TOKEN_COUNT_EVENT) + "\n")
+
+        newer_dir = self.codex_home / "sessions" / "2026" / "03" / "12"
+        newer_dir.mkdir(parents=True)
+        (newer_dir / "rollout-newer.jsonl").write_text(json.dumps(CODEX_TOKEN_COUNT_NULL_LIMITS) + "\n")
+
+        output = self._run_codex(budget=150, write_session=False)
+        self.assertIn("ctx 51k/258k 19%", output)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", output)
+
+    def test_codex_keeps_last_known_rate_limits_stable_when_new_sessions_are_null(self):
+        self._write_session([CODEX_TOKEN_COUNT_EVENT])
+        seeded_output = self._run_codex(budget=150, write_session=False)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", seeded_output)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", seeded_output)
+
+        for session_file in (self.codex_home / "sessions").glob("**/*.jsonl"):
+            session_file.unlink()
+
+        newer_dir = self.codex_home / "sessions" / "2026" / "03" / "12"
+        newer_dir.mkdir(parents=True)
+        (newer_dir / "rollout-newer.jsonl").write_text(json.dumps(CODEX_TOKEN_COUNT_NULL_LIMITS) + "\n")
+
+        output = self._run_codex(budget=150, write_session=False)
+        self.assertIn("ctx 51k/258k 19%", output)
+        self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
+        self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", output)
+
     def test_codex_wide_budget_all_segments(self):
         output = self._run_codex(budget=150)
         self.assertIn("gpt-5.4", output)
@@ -840,7 +872,7 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("eff high", lines[0])
         self.assertNotIn("5h ", lines[0])
         self.assertNotIn("weekly ", lines[0])
-        self.assertRegex(lines[1], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\]")
+        self.assertRegex(lines[1], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\] \d{{2}}:\d{{2}} reset$")
         self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
 
     def test_codex_bars_layout_uses_custom_two_week_time_format(self):

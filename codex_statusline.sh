@@ -192,10 +192,131 @@ find_latest_session() {
     find "$session_base" -name "*.jsonl" -type f 2>/dev/null | sort -r | head -1
 }
 
+find_latest_token_count_line_in_file() {
+    local session_file="$1"
+
+    [ -z "$session_file" ] && return 1
+
+    if command -v tac >/dev/null 2>&1; then
+        tac "$session_file" | grep -m1 '"token_count"'
+    else
+        tail -r "$session_file" 2>/dev/null | grep -m1 '"token_count"'
+    fi
+}
+
+find_recent_limits_line() {
+    local session_file line
+
+    while IFS= read -r session_file; do
+        [ -n "$session_file" ] || continue
+
+        if command -v tac >/dev/null 2>&1; then
+            line=$(
+                tac "$session_file" | while IFS= read -r candidate; do
+                    if [[ "$candidate" == *'"token_count"'* ]] && \
+                       printf '%s' "$candidate" | jq -e '.payload.rate_limits.primary != null' >/dev/null 2>&1; then
+                        printf '%s\n' "$candidate"
+                        break
+                    fi
+                done
+            )
+        else
+            line=$(
+                tail -r "$session_file" 2>/dev/null | while IFS= read -r candidate; do
+                    if [[ "$candidate" == *'"token_count"'* ]] && \
+                       printf '%s' "$candidate" | jq -e '.payload.rate_limits.primary != null' >/dev/null 2>&1; then
+                        printf '%s\n' "$candidate"
+                        break
+                    fi
+                done
+            )
+        fi
+
+        if [ -n "$line" ]; then
+            printf '%s' "$line"
+            return 0
+        fi
+    done < <(find "$session_base" -name "*.jsonl" -type f 2>/dev/null | sort -r)
+
+    return 1
+}
+
+parse_token_count_line() {
+    local line="$1"
+
+    [ -n "$line" ] || return 1
+
+    printf '%s' "$line" | jq -c '{
+        event_ts: .timestamp,
+        input: .payload.info.total_token_usage.input_tokens,
+        cached: .payload.info.total_token_usage.cached_input_tokens,
+        output: .payload.info.total_token_usage.output_tokens,
+        total: .payload.info.total_token_usage.total_tokens,
+        window: .payload.info.model_context_window,
+        primary_pct: .payload.rate_limits.primary.used_percent,
+        primary_reset: .payload.rate_limits.primary.resets_at,
+        secondary_pct: .payload.rate_limits.secondary.used_percent,
+        secondary_reset: .payload.rate_limits.secondary.resets_at,
+        has_limits: (.payload.rate_limits.primary != null)
+    }' 2>/dev/null
+}
+
+resolve_limits_cache_file() {
+    local session_cache_file="$1"
+    local cache_dir
+
+    cache_dir=$(dirname "$session_cache_file")
+    printf "%s" "${CODEX_STATUSLINE_LIMITS_CACHE_FILE:-$cache_dir/statusline-last-limits.json}"
+}
+
+limits_json_is_usable() {
+    local limits_json="$1"
+    local now_epoch="$2"
+    local primary_reset secondary_reset
+
+    [ -n "$limits_json" ] || return 1
+    [ "$(printf '%s' "$limits_json" | jq -r '.has_limits // false' 2>/dev/null)" = "true" ] || return 1
+
+    primary_reset=$(printf '%s' "$limits_json" | jq -r '.primary_reset // 0' 2>/dev/null)
+    secondary_reset=$(printf '%s' "$limits_json" | jq -r '.secondary_reset // 0' 2>/dev/null)
+
+    if [ "$primary_reset" -gt "$now_epoch" ] 2>/dev/null || [ "$secondary_reset" -gt "$now_epoch" ] 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
+read_last_known_limits() {
+    local limits_cache_file="$1"
+    local now_epoch="$2"
+    local cached_limits
+
+    [ -f "$limits_cache_file" ] || return 1
+
+    cached_limits=$(cat "$limits_cache_file" 2>/dev/null)
+    limits_json_is_usable "$cached_limits" "$now_epoch" || return 1
+
+    printf '%s' "$cached_limits"
+}
+
+write_last_known_limits() {
+    local limits_cache_file="$1"
+    local limits_json="$2"
+    local now_epoch="$3"
+
+    limits_json_is_usable "$limits_json" "$now_epoch" || return 1
+
+    mkdir -p "$(dirname "$limits_cache_file")"
+    printf '%s' "$limits_json" > "$limits_cache_file"
+}
+
 parse_session_data() {
     local cache_file="${CODEX_STATUSLINE_CACHE_FILE:-/tmp/codex/statusline-session-cache.json}"
     local cache_max_age=10
+    local limits_cache_file
     mkdir -p /tmp/codex
+    limits_cache_file=$(resolve_limits_cache_file "$cache_file")
 
     if [ -f "$cache_file" ]; then
         local mtime now age
@@ -213,11 +334,7 @@ parse_session_data() {
     [ -z "$session_file" ] && return 1
 
     local line
-    if command -v tac >/dev/null 2>&1; then
-        line=$(tac "$session_file" | grep -m1 '"token_count"')
-    else
-        line=$(tail -r "$session_file" 2>/dev/null | grep -m1 '"token_count"')
-    fi
+    line=$(find_latest_token_count_line_in_file "$session_file")
     [ -z "$line" ] && return 1
 
     if ! command -v jq >/dev/null 2>&1; then
@@ -225,19 +342,36 @@ parse_session_data() {
     fi
 
     local parsed
-    parsed=$(printf '%s' "$line" | jq -c '{
-        event_ts: .timestamp,
-        input: .payload.info.total_token_usage.input_tokens,
-        cached: .payload.info.total_token_usage.cached_input_tokens,
-        output: .payload.info.total_token_usage.output_tokens,
-        total: .payload.info.total_token_usage.total_tokens,
-        window: .payload.info.model_context_window,
-        primary_pct: .payload.rate_limits.primary.used_percent,
-        primary_reset: .payload.rate_limits.primary.resets_at,
-        secondary_pct: .payload.rate_limits.secondary.used_percent,
-        secondary_reset: .payload.rate_limits.secondary.resets_at,
-        has_limits: (.payload.rate_limits.primary != null)
-    }' 2>/dev/null)
+    local now_epoch
+    parsed=$(parse_token_count_line "$line")
+    now_epoch=$(date +%s)
+
+    if [ -n "$parsed" ] && [ "$(printf '%s' "$parsed" | jq -r '.has_limits')" = "true" ]; then
+        write_last_known_limits "$limits_cache_file" "$parsed" "$now_epoch" || true
+    elif [ -n "$parsed" ]; then
+        local fallback_line fallback_parsed
+        fallback_parsed=$(read_last_known_limits "$limits_cache_file" "$now_epoch" 2>/dev/null || true)
+
+        if [ -z "$fallback_parsed" ]; then
+            fallback_line=$(find_recent_limits_line 2>/dev/null || true)
+            if [ -n "$fallback_line" ]; then
+                fallback_parsed=$(parse_token_count_line "$fallback_line")
+                write_last_known_limits "$limits_cache_file" "$fallback_parsed" "$now_epoch" || true
+            fi
+        fi
+
+        if [ -n "$fallback_parsed" ] && [ "$(printf '%s' "$fallback_parsed" | jq -r '.has_limits')" = "true" ]; then
+            parsed=$(
+                printf '%s\n%s' "$parsed" "$fallback_parsed" | jq -sc '.[0] + {
+                    primary_pct: .[1].primary_pct,
+                    primary_reset: .[1].primary_reset,
+                    secondary_pct: .[1].secondary_pct,
+                    secondary_reset: .[1].secondary_reset,
+                    has_limits: .[1].has_limits
+                }' 2>/dev/null
+            )
+        fi
+    fi
 
     if [ -n "$parsed" ]; then
         printf '%s' "$parsed" > "$cache_file"
@@ -683,6 +817,10 @@ render_bars_output() {
     local full_five_time="$five_hour_reset"
     local full_seven_time="$seven_day_reset"
     local short_seven_time="$seven_day_date"
+
+    if [ -n "$full_five_time" ]; then
+        full_five_time="${full_five_time} reset"
+    fi
 
     render_compact_output 0
     local top_line="$OUTPUT_TEXT"
