@@ -5,6 +5,15 @@ set -f
 # Codex CLI status line — reads model/effort from config.toml,
 # token usage and rate limits from session JSONL files.
 
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+common_script="$script_dir/codex_statusline_common.sh"
+if [ ! -f "$common_script" ]; then
+    printf 'missing shared helper: %s\n' "$common_script" >&2
+    exit 1
+fi
+# shellcheck source=./codex_statusline_common.sh
+. "$common_script"
+
 # Parse arguments: codex_statusline.sh [project_dir] [--line N]
 target_dir="$PWD"
 line_select=0
@@ -22,21 +31,9 @@ fi
 
 config_file="$HOME/.codex/config.toml"
 session_base="${CODEX_STATUSLINE_SESSION_DIR:-$HOME/.codex/sessions}"
-
-# Read statusline config from config.toml [statusline] section, env vars take priority.
-_toml_get() {
-    local key="$1" default="$2"
-    if [ -f "$config_file" ]; then
-        local val
-        val=$(sed -n '/^\[statusline\]/,/^\[/{ s/^'"$key"'[[:space:]]*=[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; }' "$config_file" 2>/dev/null | head -1)
-        [ -n "$val" ] && { printf "%s" "$val"; return; }
-    fi
-    printf "%s" "$default"
-}
-
-theme_name="${CODEX_STATUSLINE_THEME:-$(_toml_get theme default)}"
-layout_name="${CODEX_STATUSLINE_LAYOUT:-$(_toml_get layout compact)}"
-bar_style_name="${CODEX_STATUSLINE_BAR_STYLE:-$(_toml_get bar_style ascii)}"
+theme_name="${CODEX_STATUSLINE_THEME:-$(statusline_toml_get "$config_file" theme default)}"
+layout_name="${CODEX_STATUSLINE_LAYOUT:-$(statusline_toml_get "$config_file" layout compact)}"
+bar_style_name="${CODEX_STATUSLINE_BAR_STYLE:-$(statusline_toml_get "$config_file" bar_style ascii)}"
 
 # Output format: tmux (#[fg=...]) vs ansi (\033[...m)
 # Auto-detect: use tmux format when TMUX is set, unless overridden.
@@ -149,7 +146,7 @@ SEG_PLAIN=""
 COMPOSED_TEXT=""
 COMPOSED_PLAIN=""
 COMPOSED_LEN=0
-GIT_SEGMENT_LEN=0
+BRANCH_SEGMENT_LEN=0
 OUTPUT_TEXT=""
 LINE_TEXT=""
 LINE_PLAIN=""
@@ -251,7 +248,7 @@ parse_token_count_line() {
         input: .payload.info.total_token_usage.input_tokens,
         cached: .payload.info.total_token_usage.cached_input_tokens,
         output: .payload.info.total_token_usage.output_tokens,
-        total: .payload.info.total_token_usage.total_tokens,
+        total: (.payload.info.last_token_usage.total_tokens // .payload.info.total_token_usage.total_tokens),
         window: .payload.info.model_context_window,
         primary_pct: .payload.rate_limits.primary.used_percent,
         primary_reset: .payload.rate_limits.primary.resets_at,
@@ -558,37 +555,44 @@ build_model_segment() {
     SEG_TEXT="${accent}${model_name}${reset}"
 }
 
-build_git_segment() {
+build_repo_segment() {
+    SEG_PLAIN="$display_dir"
+    SEG_TEXT="${teal}${display_dir}${reset}"
+}
+
+build_branch_segment() {
     SEG_PLAIN=""
     SEG_TEXT=""
 
-    local base_plain="$display_dir"
-    if [ -n "$git_branch" ]; then
-        base_plain="${display_dir}@${git_branch}"
+    [ -n "$git_branch" ] || return
+
+    local label_prefix="git "
+    local branch_name="$git_branch"
+    if [ "$branch_truncate_width" -gt 0 ]; then
+        local branch_name_limit=$(( branch_truncate_width - ${#label_prefix} ))
+        if [ "$branch_name_limit" -le 3 ]; then
+            branch_name="..."
+        elif [ ${#branch_name} -gt "$branch_name_limit" ]; then
+            branch_name=$(truncate_middle "$branch_name" "$branch_name_limit")
+        fi
     fi
 
-    if [ "$show_git_diff" -eq 1 ] && [ -n "$git_stat" ]; then
-        base_plain="${base_plain} (${git_stat})"
-    fi
+    SEG_PLAIN="${label_prefix}${branch_name}"
+    SEG_TEXT="${dim}git${reset} ${branch}${branch_name}${reset}"
+}
 
-    if [ "$git_truncate_width" -gt 0 ] && [ ${#base_plain} -gt "$git_truncate_width" ]; then
-        local truncated
-        truncated=$(truncate_middle "$base_plain" "$git_truncate_width")
-        SEG_PLAIN="$truncated"
-        SEG_TEXT="${teal}${truncated}${reset}"
+build_git_diff_segment() {
+    SEG_PLAIN=""
+    SEG_TEXT=""
+
+    if [ "$show_git_diff" -ne 1 ] || [ -z "$git_stat" ]; then
         return
     fi
 
-    SEG_PLAIN="$base_plain"
-    SEG_TEXT="${teal}${display_dir}${reset}"
-    if [ -n "$git_branch" ]; then
-        SEG_TEXT+="${dim}@${reset}${branch}${git_branch}${reset}"
-    fi
-    if [ "$show_git_diff" -eq 1 ] && [ -n "$git_stat" ]; then
-        local added_part="${git_stat%% *}"
-        local deleted_part="${git_stat##* }"
-        SEG_TEXT+=" ${dim}(${reset}${green}${added_part}${reset} ${red}${deleted_part}${reset}${dim})${reset}"
-    fi
+    local added_part="${git_stat%% *}"
+    local deleted_part="${git_stat##* }"
+    SEG_PLAIN="(${git_stat})"
+    SEG_TEXT="${dim}(${reset}${green}${added_part}${reset} ${red}${deleted_part}${reset}${dim})${reset}"
 }
 
 build_ctx_segment() {
@@ -658,26 +662,46 @@ build_seven_day_segment() {
 # ── Composition ──────────────────────────────────────────────────
 
 compose_segments() {
+    local include_repo_segment="${1:-1}"
+    local include_branch_segment="${2:-1}"
+    local include_usage_segments="${3:-1}"
+    local include_git_diff_segment="${4:-1}"
     segment_texts=()
     segment_plains=()
-    GIT_SEGMENT_LEN=0
+    BRANCH_SEGMENT_LEN=0
 
     build_model_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
-
-    build_git_segment
-    if [ -n "$SEG_PLAIN" ]; then
-        GIT_SEGMENT_LEN=${#SEG_PLAIN}
-        add_segment "$SEG_TEXT" "$SEG_PLAIN"
-    fi
-
-    build_ctx_segment
     add_segment "$SEG_TEXT" "$SEG_PLAIN"
 
     build_eff_segment
     add_segment "$SEG_TEXT" "$SEG_PLAIN"
 
-    if [ "$include_usage_summary" -eq 1 ]; then
+    build_ctx_segment
+    add_segment "$SEG_TEXT" "$SEG_PLAIN"
+
+    if [ "$include_repo_segment" -eq 1 ]; then
+        build_repo_segment
+        if [ -n "$SEG_PLAIN" ]; then
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
+    fi
+
+    if [ "$include_branch_segment" -eq 1 ]; then
+        build_branch_segment
+        if [ -n "$SEG_PLAIN" ]; then
+            BRANCH_SEGMENT_LEN=${#SEG_PLAIN}
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
+
+        if [ "$include_git_diff_segment" -eq 1 ]; then
+            build_git_diff_segment
+            if [ -n "$SEG_PLAIN" ]; then
+                add_segment "$SEG_TEXT" "$SEG_PLAIN"
+            fi
+        fi
+    fi
+
+    if [ "$include_usage_segments" -eq 1 ]; then
         build_five_hour_segment
         add_segment "$SEG_TEXT" "$SEG_PLAIN"
 
@@ -705,38 +729,81 @@ compose_segments() {
 
 render_compact_output() {
     include_usage_summary="$1"
-    compose_segments
+    compose_segments 0 1 "$include_usage_summary" 1
 
     if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day_reset" -eq 1 ]; then
         show_seven_day_reset=0
-        compose_segments
+        compose_segments 0 1 "$include_usage_summary" 1
     fi
 
     if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_five_hour_reset" -eq 1 ]; then
         show_five_hour_reset=0
-        compose_segments
-    fi
-
-    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_git_diff" -eq 1 ]; then
-        show_git_diff=0
-        compose_segments
+        compose_segments 0 1 "$include_usage_summary" 1
     fi
 
     if [ "$include_usage_summary" -eq 1 ] && [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_seven_day" -eq 1 ]; then
         show_seven_day=0
-        compose_segments
+        compose_segments 0 1 "$include_usage_summary" 1
     fi
 
-    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$GIT_SEGMENT_LEN" -gt 0 ]; then
-        available_for_git=$(( max_width - (COMPOSED_LEN - GIT_SEGMENT_LEN) ))
-        if [ "$available_for_git" -lt 3 ]; then
-            available_for_git=3
+    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$show_git_diff" -eq 1 ]; then
+        show_git_diff=0
+        compose_segments 0 1 "$include_usage_summary" 1
+    fi
+
+    if [ "$COMPOSED_LEN" -gt "$max_width" ] && [ "$BRANCH_SEGMENT_LEN" -gt 0 ]; then
+        available_for_branch=$(( max_width - (COMPOSED_LEN - BRANCH_SEGMENT_LEN) ))
+        if [ "$available_for_branch" -lt 10 ]; then
+            available_for_branch=10
         fi
-        git_truncate_width="$available_for_git"
-        compose_segments
+        branch_truncate_width="$available_for_branch"
+        compose_segments 0 1 "$include_usage_summary" 1
     fi
 
     OUTPUT_TEXT="$COMPOSED_TEXT"
+}
+
+build_bars_git_line() {
+    local repo_name="$display_dir"
+    local branch_name="$git_branch"
+    local plain_text text_output
+
+    if [ -n "$branch_name" ]; then
+        plain_text="${repo_name}@${branch_name}"
+        if [ ${#plain_text} -gt "$max_width" ]; then
+            local branch_name_limit=$(( max_width - ${#repo_name} - 1 ))
+            if [ "$branch_name_limit" -le 3 ]; then
+                branch_name="..."
+            elif [ ${#branch_name} -gt "$branch_name_limit" ]; then
+                branch_name=$(truncate_middle "$branch_name" "$branch_name_limit")
+            fi
+            plain_text="${repo_name}@${branch_name}"
+        fi
+        if [ ${#plain_text} -gt "$max_width" ]; then
+            plain_text=$(truncate_middle "$plain_text" "$max_width")
+        fi
+        text_output="${muted}${repo_name}${reset}${dim}@${reset}${muted}${branch_name}${reset}"
+    else
+        plain_text="$repo_name"
+        if [ ${#plain_text} -gt "$max_width" ]; then
+            plain_text=$(truncate_middle "$plain_text" "$max_width")
+        fi
+        text_output="${muted}${plain_text}${reset}"
+    fi
+
+    LINE_PLAIN="$plain_text"
+    LINE_TEXT="$text_output"
+}
+
+render_bars_overview_output() {
+    compose_segments 0 0 0 0
+    OUTPUT_TEXT="$COMPOSED_TEXT"
+}
+
+build_bars_overview_line() {
+    compose_segments 0 0 0 0
+    LINE_PLAIN="$COMPOSED_PLAIN"
+    LINE_TEXT="$COMPOSED_TEXT"
 }
 
 build_usage_bar_line() {
@@ -813,40 +880,68 @@ build_usage_unavailable_line() {
     LINE_TEXT="${dim}${label}${reset} ${muted}unavailable${reset}"
 }
 
-render_bars_output() {
+build_bars_line() {
+    local line_no="$1"
     local full_five_time="$five_hour_reset"
     local full_seven_time="$seven_day_reset"
     local short_seven_time="$seven_day_date"
+
+    LINE_PLAIN=""
+    LINE_TEXT=""
 
     if [ -n "$full_five_time" ]; then
         full_five_time="${full_five_time} reset"
     fi
 
-    render_compact_output 0
-    local top_line="$OUTPUT_TEXT"
+    case "$line_no" in
+        1)
+            [ "$show_bars_git_line" -eq 1 ] || return
+            build_bars_git_line
+            ;;
+        2)
+            [ "$show_bars_overview_line" -eq 1 ] || return
+            build_bars_overview_line
+            ;;
+        3)
+            if [ "$usage_available" -eq 1 ]; then
+                build_usage_bar_line "5h" "$five_hour_remaining_pct" "${five_hour_remaining_pct}% left" "$full_five_time" ""
+            else
+                build_usage_unavailable_line "5h"
+            fi
+            ;;
+        4)
+            if [ "$usage_available" -eq 1 ]; then
+                build_usage_bar_line "$weekly_label" "$seven_day_remaining_pct" "${seven_day_remaining_pct}% left" "$full_seven_time" "$short_seven_time"
+            else
+                build_usage_unavailable_line "$weekly_label"
+            fi
+            ;;
+    esac
+}
 
-    if [ "$usage_available" -eq 1 ]; then
-        build_usage_bar_line "5h" "$five_hour_remaining_pct" "${five_hour_remaining_pct}% left" "$full_five_time" ""
-    else
-        build_usage_unavailable_line "5h"
-    fi
-    local five_line="$LINE_TEXT"
+render_bars_output() {
+    local line_no
+    local output_text=""
 
-    if [ "$usage_available" -eq 1 ]; then
-        build_usage_bar_line "$weekly_label" "$seven_day_remaining_pct" "${seven_day_remaining_pct}% left" "$full_seven_time" "$short_seven_time"
-    else
-        build_usage_unavailable_line "$weekly_label"
-    fi
-    local seven_line="$LINE_TEXT"
+    for line_no in 1 2 3 4; do
+        build_bars_line "$line_no"
+        [ -n "$LINE_TEXT" ] || continue
+        if [ -n "$output_text" ]; then
+            output_text+=$'\n'
+        fi
+        output_text+="$LINE_TEXT"
+    done
 
-    OUTPUT_TEXT="${top_line}"$'\n'"${five_line}"$'\n'"${seven_line}"
+    OUTPUT_TEXT="$output_text"
 }
 
 # ── Collect data ─────────────────────────────────────────────────
 
 model_name=$(resolve_model)
 effort_level=$(resolve_effort)
-two_week_time_format=$(resolve_two_week_time_format "${CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT:-$(_toml_get two_week_time_format "")}")
+two_week_time_format=$(resolve_two_week_time_format "${CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT:-$(statusline_toml_get "$config_file" two_week_time_format "")}")
+show_bars_git_line=$(statusline_resolve_bool_setting "${CODEX_STATUSLINE_SHOW_GIT_LINE:-$(statusline_toml_get "$config_file" show_git_line "")}" "1")
+show_bars_overview_line=$(statusline_resolve_bool_setting "${CODEX_STATUSLINE_SHOW_OVERVIEW_LINE:-$(statusline_toml_get "$config_file" show_overview_line "")}" "1")
 
 display_dir="${target_dir##*/}"
 git_branch=""
@@ -867,7 +962,7 @@ show_seven_day=1
 show_five_hour_reset=0
 show_seven_day_reset=0
 show_git_diff=0
-git_truncate_width=0
+branch_truncate_width=0
 
 five_hour_pct=0
 five_hour_remaining_pct=0
@@ -922,15 +1017,14 @@ fi
 [ -n "$git_stat" ] && show_git_diff=1
 max_width=$(get_max_width)
 
-# --line N: output a single line from bars layout (1=overview, 2=5h, 3=weekly)
+# --line N: output a single line from bars layout (1=git, 2=overview, 3=5h, 4=weekly)
 if [ "$line_select" -gt 0 ] 2>/dev/null; then
-    # Force bars rendering, then extract requested line
-    render_bars_output
-    line_out=$(printf "%b" "$OUTPUT_TEXT" | sed -n "${line_select}p")
+    build_bars_line "$line_select"
+    line_out="$LINE_TEXT"
     if [ "$output_format" = "tmux" ]; then
         printf "%s" "$line_out"
     else
-        printf "%s" "$line_out"
+        printf "%b" "$line_out"
     fi
     exit 0
 fi

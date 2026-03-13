@@ -18,9 +18,11 @@ TARGET_SCRIPT="$CLAUDE_DIR/statusline.sh"
 TMUX_LAUNCHER_SOURCE="$SCRIPT_DIR/codex_tmux.sh"
 TMUX_STATUS_SOURCE="$SCRIPT_DIR/codex_tmux_status.sh"
 CODEX_STATUSLINE_SOURCE="$SCRIPT_DIR/codex_statusline.sh"
+CODEX_COMMON_SOURCE="$SCRIPT_DIR/codex_statusline_common.sh"
 TMUX_LAUNCHER_TARGET="$CODEX_BIN_DIR/codex-tmux"
 TMUX_STATUS_TARGET="$CODEX_BIN_DIR/codex-tmux-status"
 CODEX_STATUSLINE_TARGET="$CODEX_BIN_DIR/codex-statusline"
+CODEX_COMMON_TARGET="$CODEX_BIN_DIR/codex-statusline-common.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -131,7 +133,7 @@ install_claude() {
 }
 
 install_codex_tmux() {
-    if [[ ! -f "$TMUX_LAUNCHER_SOURCE" || ! -f "$CODEX_STATUSLINE_SOURCE" ]]; then
+    if [[ ! -f "$TMUX_LAUNCHER_SOURCE" || ! -f "$CODEX_STATUSLINE_SOURCE" || ! -f "$CODEX_COMMON_SOURCE" ]]; then
         err "找不到 Codex tmux 脚本，请确认仓库文件完整"
         exit 1
     fi
@@ -145,6 +147,10 @@ install_codex_tmux() {
     info "复制 Codex 状态栏脚本 → $CODEX_STATUSLINE_TARGET"
     cp -f "$CODEX_STATUSLINE_SOURCE" "$CODEX_STATUSLINE_TARGET"
     chmod +x "$CODEX_STATUSLINE_TARGET"
+
+    info "复制 Codex 共享脚本 → $CODEX_COMMON_TARGET"
+    cp -f "$CODEX_COMMON_SOURCE" "$CODEX_COMMON_TARGET"
+    chmod +x "$CODEX_COMMON_TARGET"
 
     info "复制 Codex tmux 状态脚本（兼容层）→ $TMUX_STATUS_TARGET"
     cp -f "$TMUX_STATUS_SOURCE" "$TMUX_STATUS_TARGET"
@@ -186,6 +192,11 @@ do_uninstall() {
     if [[ -f "$CODEX_STATUSLINE_TARGET" ]]; then
         rm -f "$CODEX_STATUSLINE_TARGET"
         ok "已删除 $CODEX_STATUSLINE_TARGET"
+    fi
+
+    if [[ -f "$CODEX_COMMON_TARGET" ]]; then
+        rm -f "$CODEX_COMMON_TARGET"
+        ok "已删除 $CODEX_COMMON_TARGET"
     fi
 
     rmdir "$CODEX_BIN_DIR" 2>/dev/null || true

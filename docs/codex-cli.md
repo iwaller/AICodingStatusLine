@@ -122,6 +122,8 @@ Codex 支持两种配置方式，**环境变量优先级高于 config.toml**。
 | `CODEX_STATUSLINE_THEME` | `default` | 主题（与 Claude Code 相同的 9 种） |
 | `CODEX_STATUSLINE_LAYOUT` | `compact` | 布局：`compact` 或 `bars` |
 | `CODEX_STATUSLINE_BAR_STYLE` | `ascii` | 进度条样式（见 [README 进度条样式](../README.md#-布局与样式)），支持 `custom:填充:空白` 自定义 |
+| `CODEX_STATUSLINE_SHOW_GIT_LINE` | `true` | 仅对 `bars` 布局生效，控制第 1 行 `repo@branch` 是否显示 |
+| `CODEX_STATUSLINE_SHOW_OVERVIEW_LINE` | `true` | 仅对 `bars` 布局生效，控制第 2 行 `model \| eff \| ctx` 是否显示 |
 | `CODEX_STATUSLINE_MAX_WIDTH` | 终端宽度 | 强制指定宽度预算 |
 | `CODEX_STATUSLINE_SESSION_DIR` | `~/.codex/sessions` | 会话目录覆盖 |
 | `CODEX_STATUSLINE_TWO_WEEK_TIME_FORMAT` | `%-m/%-d %-H:%M reset` | `weekly` 时间格式，支持 `%y %Y %m %d %H %M %b %B` 与空格、`/`、`:`、`-` |
@@ -137,6 +139,8 @@ Codex 支持两种配置方式，**环境变量优先级高于 config.toml**。
 theme = "dracula"
 layout = "bars"
 bar_style = "blocks"
+show_git_line = true
+show_overview_line = true
 two_week_time_format = "%y-%m-%d %H:%M"
 ```
 
@@ -147,6 +151,8 @@ two_week_time_format = "%y-%m-%d %H:%M"
 | `theme` | `default`、`forest`、`dracula`、`monokai`、`solarized`、`ocean`、`sunset`、`amber`、`rose` | 配色主题 |
 | `layout` | `compact`、`bars` | 布局模式 |
 | `bar_style` | `ascii`、`dots`、`squares`、`blocks`、`braille`、`shades`、`diamonds`、`custom:X:Y` | 进度条样式 |
+| `show_git_line` | `true`、`false` | 仅对 `bars` 布局生效，控制 git 行是否显示 |
+| `show_overview_line` | `true`、`false` | 仅对 `bars` 布局生效，控制概览行是否显示 |
 | `two_week_time_format` | 合法 `strftime` 子集 | `weekly` 绝对时间格式 |
 
 **完整 config.toml 示例：**
@@ -159,6 +165,8 @@ model_reasoning_effort = "high"
 theme = "ocean"
 layout = "bars"
 bar_style = "diamonds"
+show_git_line = true
+show_overview_line = true
 two_week_time_format = "%m/%d %H:%M"
 ```
 
@@ -202,6 +210,35 @@ two_week_time_format = "%m/%d %H:%M"
 ```
 
 `codex_tmux.sh` 会自动检测 `bars` 布局并配置 tmux 四行状态栏（`status 4`），无需手动设置。
+
+可通过两个开关动态隐藏前两行，并自动缩减 tmux 状态栏高度：
+
+```toml
+[statusline]
+layout = "bars"
+show_git_line = false
+show_overview_line = true
+```
+
+常见组合：
+
+```text
+show_git_line=true,  show_overview_line=true   -> 4 行: git / overview / 5h / weekly
+show_git_line=false, show_overview_line=true   -> 3 行: overview / 5h / weekly
+show_git_line=true,  show_overview_line=false  -> 3 行: git / 5h / weekly
+show_git_line=false, show_overview_line=false  -> 2 行: 5h / weekly
+```
+
+`codex_statusline.sh --line N` 的内部编号保持不变：
+
+```text
+1 = git
+2 = overview
+3 = 5h
+4 = weekly
+```
+
+如果第 1 或第 2 行被隐藏，对应 `--line` 会返回空字符串；tmux 启动器会自动把可见行映射到新的显示顺序。
 
 布局来源优先级：环境变量 `CODEX_STATUSLINE_LAYOUT` > `config.toml` 的 `[statusline].layout` > 默认 `compact`。
 

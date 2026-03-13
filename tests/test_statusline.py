@@ -28,6 +28,7 @@ CODEX_WEEKLY_LEFT = 96
 CODEX_TMUX_LAUNCHER_NAME = "codex-tmux"
 CODEX_TMUX_STATUS_NAME = "codex-tmux-status"
 CODEX_STATUSLINE_NAME = "codex-statusline"
+CODEX_STATUSLINE_COMMON_NAME = "codex-statusline-common.sh"
 
 # Simulated Codex session JSONL token_count event
 CODEX_TOKEN_COUNT_EVENT = {
@@ -58,6 +59,49 @@ CODEX_TOKEN_COUNT_EVENT = {
             },
             "credits": None,
             "plan_type": "plus",
+        },
+    },
+}
+
+CODEX_TOKEN_COUNT_EVENT_WITH_LAST_USAGE = {
+    "timestamp": "2026-03-13T03:19:14.442Z",
+    "type": "event_msg",
+    "payload": {
+        "type": "token_count",
+        "info": {
+            "total_token_usage": {
+                "input_tokens": 8523974,
+                "cached_input_tokens": 7543552,
+                "output_tokens": 23658,
+                "reasoning_output_tokens": 5371,
+                "total_tokens": 8547632,
+            },
+            "last_token_usage": {
+                "input_tokens": 128588,
+                "cached_input_tokens": 5504,
+                "output_tokens": 728,
+                "reasoning_output_tokens": 185,
+                "total_tokens": 129316,
+            },
+            "model_context_window": 258400,
+        },
+        "rate_limits": {
+            "primary": {
+                "used_percent": 1.0,
+                "window_minutes": 300,
+                "resets_at": 1773387265,
+            },
+            "secondary": {
+                "used_percent": 13.0,
+                "window_minutes": 10080,
+                "resets_at": 1773876842,
+            },
+            "credits": {
+                "has_credits": False,
+                "unlimited": False,
+                "balance": None,
+            },
+            "plan_type": None,
         },
     },
 }
@@ -607,19 +651,19 @@ class StatusLineTests(unittest.TestCase):
         self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_LAUNCHER_NAME).exists())
         self.assertTrue((install_home / ".codex" / "bin" / CODEX_TMUX_STATUS_NAME).exists())
         self.assertTrue((install_home / ".codex" / "bin" / CODEX_STATUSLINE_NAME).exists())
+        self.assertTrue((install_home / ".codex" / "bin" / CODEX_STATUSLINE_COMMON_NAME).exists())
         self.assertFalse((install_home / ".claude" / "statusline.sh").exists())
 
-    def test_install_script_codex_target_installs_four_line_bars_tmux_launcher(self):
+    def test_install_script_codex_target_installs_dynamic_bars_tmux_launcher(self):
         install_home, _ = self._run_install("--target", "codex")
         launcher_text = (install_home / ".codex" / "bin" / CODEX_TMUX_LAUNCHER_NAME).read_text()
 
-        self.assertIn('tmux set-option -t "$session_name" -q status 4', launcher_text)
         self.assertIn('tmux set-option -t "$session_name" -q status-left ""', launcher_text)
-        self.assertIn('tmux set-option -t "$session_name" -q status-format[0] "  #($status_base --line 1)"', launcher_text)
-        self.assertIn('tmux set-option -t "$session_name" -q status-format[1] "  #($status_base --line 2)"', launcher_text)
-        self.assertIn('tmux set-option -t "$session_name" -q status-format[2] "  #($status_base --line 3)"', launcher_text)
-        self.assertIn('tmux set-option -t "$session_name" -q status-format[3] "  #($status_base --line 4)"', launcher_text)
-        self.assertNotIn('tmux set-option -t "$session_name" -q status-left "  #($status_base --line 1)"', launcher_text)
+        self.assertIn('CODEX_STATUSLINE_SHOW_GIT_LINE', launcher_text)
+        self.assertIn('CODEX_STATUSLINE_SHOW_OVERVIEW_LINE', launcher_text)
+        self.assertIn('visible_lines=()', launcher_text)
+        self.assertIn('tmux set-option -t "$session_name" -q status "${#visible_lines[@]}"', launcher_text)
+        self.assertIn('tmux set-option -t "$session_name" -q "status-format[$idx]" "  #($status_base --line ${visible_lines[$idx]})"', launcher_text)
 
     def test_install_script_uninstall_removes_tmux_assets(self):
         install_home, _ = self._run_install("--target", "codex")
@@ -638,15 +682,17 @@ class StatusLineTests(unittest.TestCase):
         output = self._run_tmux_status()
         stripped = strip_ansi(output)
 
-        self.assertIn("clean-repo", stripped)
-        self.assertIn("codex/feature/for-claude", stripped)
+        self.assertIn("eff med", stripped)
+        self.assertIn("ctx 0/0 0%", stripped)
+        self.assertIn("git ", stripped)
+        self.assertIn("for-claude", stripped)
 
     def test_tmux_status_script_includes_model_when_available(self):
         output = self._run_tmux_status(extra_env={"CODEX_MODEL_NAME": "gpt-5.1-codex"})
         stripped = strip_ansi(output)
 
         self.assertIn("gpt-5.1-codex", stripped)
-        self.assertIn("clean-repo", stripped)
+        self.assertIn("git codex/feature/for-claude", stripped)
 
     def test_tmux_status_script_shows_git_diff_for_dirty_repo(self):
         repo_dir = Path(self.temp_dir.name) / "dirty-repo-tmux"
@@ -709,7 +755,15 @@ class CodexStatusLineTests(unittest.TestCase):
         lines = [json.dumps(e) for e in events]
         session_file.write_text("\n".join(lines) + "\n")
 
-    def _run_codex(self, budget=None, extra_env=None, raw=False, write_session=True, cwd=None):
+    def _write_codex_config(self, extra_statusline=None):
+        config_text = 'model = "gpt-5.4"\nmodel_reasoning_effort = "high"\n'
+        if extra_statusline:
+            config_text += "\n[statusline]\n" + extra_statusline
+            if not config_text.endswith("\n"):
+                config_text += "\n"
+        (self.codex_home / "config.toml").write_text(config_text)
+
+    def _run_codex(self, budget=None, extra_env=None, raw=False, write_session=True, cwd=None, args=None):
         env = os.environ.copy()
         env["HOME"] = str(Path(self.temp_dir.name))
         env["TZ"] = "UTC"
@@ -736,8 +790,12 @@ class CodexStatusLineTests(unittest.TestCase):
         if write_session:
             self._write_session()
 
+        cmd = ["/bin/bash", str(CODEX_SCRIPT), str(cwd or self.repo)]
+        if args:
+            cmd.extend(args)
+
         result = subprocess.run(
-            ["/bin/bash", str(CODEX_SCRIPT), str(cwd or self.repo)],
+            cmd,
             capture_output=True,
             text=True,
             env=env,
@@ -745,6 +803,41 @@ class CodexStatusLineTests(unittest.TestCase):
             check=True,
         )
         return result.stdout if raw else strip_ansi(result.stdout)
+
+    def _run_codex_tmux_launcher(self, extra_env=None, cwd=None, config_statusline=None):
+        fake_bin = Path(self.temp_dir.name) / "fake-bin"
+        fake_bin.mkdir(exist_ok=True)
+        tmux_log = Path(self.temp_dir.name) / "tmux-launcher.log"
+        tmux_script = fake_bin / "tmux"
+        tmux_script.write_text(
+            "#!/bin/bash\n"
+            "for arg in \"$@\"; do printf '%s\\t' \"$arg\"; done >> \"$TMUX_LOG\"\n"
+            "printf '\\n' >> \"$TMUX_LOG\"\n"
+            "exit 0\n"
+        )
+        tmux_script.chmod(0o755)
+
+        if config_statusline is not None:
+            self._write_codex_config(config_statusline)
+
+        env = os.environ.copy()
+        env["HOME"] = str(Path(self.temp_dir.name))
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+        env["TMUX_LOG"] = str(tmux_log)
+        env["CODEX_TMUX_STATUS_SCRIPT"] = str(CODEX_SCRIPT)
+        if extra_env:
+            env.update(extra_env)
+
+        subprocess.run(
+            ["/bin/bash", str(TMUX_LAUNCHER_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(cwd or self.repo),
+            check=True,
+        )
+
+        return tmux_log.read_text().splitlines()
 
     def test_codex_model_from_config(self):
         output = self._run_codex(budget=150)
@@ -766,6 +859,13 @@ class CodexStatusLineTests(unittest.TestCase):
     def test_codex_ctx_segment(self):
         output = self._run_codex(budget=150)
         self.assertIn("ctx 89k/258k 34%", output)
+
+    def test_codex_ctx_prefers_last_token_usage_when_available(self):
+        self._write_session([CODEX_TOKEN_COUNT_EVENT_WITH_LAST_USAGE])
+        output = self._run_codex(budget=150, write_session=False)
+
+        self.assertIn("ctx 129k/258k 50%", output)
+        self.assertNotIn("ctx 8.5m/258k", output)
 
     def test_codex_five_hour_segment(self):
         output = self._run_codex(budget=150)
@@ -835,23 +935,22 @@ class CodexStatusLineTests(unittest.TestCase):
 
     def test_codex_wide_budget_all_segments(self):
         output = self._run_codex(budget=150)
-        self.assertIn("gpt-5.4", output)
-        self.assertIn("codex-repo@feat/codex-test", output)
-        self.assertIn("ctx 89k/258k 34%", output)
-        self.assertIn("eff high", output)
+        self.assertIn("gpt-5.4 | eff high | ctx 89k/258k 34% | git feat/codex-test", output)
+        self.assertNotIn("codex-repo |", output)
         self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
         self.assertIn(f"weekly {CODEX_WEEKLY_LEFT}% left", output)
         self.assertLessEqual(len(output), 150)
 
     def test_codex_narrow_budget_truncation(self):
-        output = self._run_codex(budget=60)
+        output = self._run_codex(budget=78)
         self.assertIn("gpt-5.4", output)
-        self.assertIn("ctx 89k/258k 34%", output)
         self.assertIn("eff high", output)
+        self.assertIn("ctx 89k/258k 34%", output)
+        self.assertIn("git ", output)
         self.assertIn(f"5h {CODEX_5H_LEFT}% left", output)
         # weekly should be dropped at narrow width
         self.assertNotIn("weekly ", output)
-        self.assertLessEqual(len(output), 60)
+        self.assertLessEqual(len(output), 78)
 
     def test_codex_remaining_usage_colors_follow_left_percent(self):
         raw_output = self._run_codex(budget=150, raw=True)
@@ -878,14 +977,115 @@ class CodexStatusLineTests(unittest.TestCase):
             extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
         )
         lines = output.splitlines()
+        self.assertEqual(4, len(lines))
+        self.assertEqual("codex-repo@feat/codex-test", lines[0])
+        self.assertEqual("gpt-5.4 | eff high | ctx 89k/258k 34%", lines[1])
+        self.assertNotIn("5h ", lines[1])
+        self.assertNotIn("weekly ", lines[1])
+        self.assertRegex(lines[2], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\] \d{{2}}:\d{{2}} reset$")
+        self.assertRegex(lines[3], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+
+    def test_codex_bars_layout_hides_git_line_with_env(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_GIT_LINE": "false",
+            },
+        )
+        lines = output.splitlines()
         self.assertEqual(3, len(lines))
-        self.assertIn("gpt-5.4", lines[0])
-        self.assertIn("ctx 89k/258k 34%", lines[0])
-        self.assertIn("eff high", lines[0])
-        self.assertNotIn("5h ", lines[0])
-        self.assertNotIn("weekly ", lines[0])
+        self.assertEqual("gpt-5.4 | eff high | ctx 89k/258k 34%", lines[0])
         self.assertRegex(lines[1], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\] \d{{2}}:\d{{2}} reset$")
         self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+        self.assertEqual(
+            "",
+            self._run_codex(
+                budget=120,
+                extra_env={
+                    "CODEX_STATUSLINE_LAYOUT": "bars",
+                    "CODEX_STATUSLINE_SHOW_GIT_LINE": "false",
+                },
+                args=["--line", "1"],
+            ).strip(),
+        )
+
+    def test_codex_bars_layout_hides_overview_line_with_env(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_OVERVIEW_LINE": "off",
+            },
+        )
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertEqual("codex-repo@feat/codex-test", lines[0])
+        self.assertRegex(lines[1], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\] \d{{2}}:\d{{2}} reset$")
+        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+        self.assertEqual(
+            "",
+            self._run_codex(
+                budget=120,
+                extra_env={
+                    "CODEX_STATUSLINE_LAYOUT": "bars",
+                    "CODEX_STATUSLINE_SHOW_OVERVIEW_LINE": "off",
+                },
+                args=["--line", "2"],
+            ).strip(),
+        )
+
+    def test_codex_bars_layout_hides_both_top_lines_with_config(self):
+        self._write_codex_config(
+            'layout = "bars"\nshow_git_line = false\nshow_overview_line = false\n'
+        )
+        output = self._run_codex(budget=120)
+        lines = output.splitlines()
+        self.assertEqual(2, len(lines))
+        self.assertRegex(lines[0], rf"^5h {CODEX_5H_LEFT}% left \[[=\-]+\] \d{{2}}:\d{{2}} reset$")
+        self.assertRegex(lines[1], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+        self.assertEqual("", self._run_codex(budget=120, args=["--line", "1"]).strip())
+        self.assertEqual("", self._run_codex(budget=120, args=["--line", "2"]).strip())
+
+    def test_codex_bars_layout_visibility_uses_config_when_env_missing(self):
+        self._write_codex_config(
+            'layout = "bars"\nshow_git_line = false\nshow_overview_line = true\n'
+        )
+        output = self._run_codex(budget=120)
+        lines = output.splitlines()
+        self.assertEqual(3, len(lines))
+        self.assertEqual("gpt-5.4 | eff high | ctx 89k/258k 34%", lines[0])
+        self.assertEqual("", self._run_codex(budget=120, args=["--line", "1"]).strip())
+        self.assertEqual("gpt-5.4 | eff high | ctx 89k/258k 34%", self._run_codex(budget=120, args=["--line", "2"]).strip())
+
+    def test_codex_bars_layout_visibility_env_overrides_config(self):
+        self._write_codex_config(
+            'layout = "bars"\nshow_git_line = false\nshow_overview_line = false\n'
+        )
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_GIT_LINE": "true",
+                "CODEX_STATUSLINE_SHOW_OVERVIEW_LINE": "true",
+            },
+        )
+        lines = output.splitlines()
+        self.assertEqual(4, len(lines))
+        self.assertEqual("codex-repo@feat/codex-test", lines[0])
+        self.assertEqual("gpt-5.4 | eff high | ctx 89k/258k 34%", lines[1])
+
+    def test_codex_bars_layout_invalid_visibility_value_falls_back_to_visible(self):
+        output = self._run_codex(
+            budget=120,
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_GIT_LINE": "maybe",
+            },
+        )
+        lines = output.splitlines()
+        self.assertEqual(4, len(lines))
+        self.assertEqual("codex-repo@feat/codex-test", lines[0])
 
     def test_codex_bars_layout_uses_custom_two_week_time_format(self):
         output = self._run_codex(
@@ -896,7 +1096,7 @@ class CodexStatusLineTests(unittest.TestCase):
             },
         )
         lines = output.splitlines()
-        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CUSTOM_CODEX_2W_TIME)}$")
+        self.assertRegex(lines[3], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CUSTOM_CODEX_2W_TIME)}$")
 
     def test_codex_bars_layout_narrow_width_keeps_two_week_absolute_time(self):
         output = self._run_codex(
@@ -907,8 +1107,9 @@ class CodexStatusLineTests(unittest.TestCase):
             },
         )
         lines = output.splitlines()
-        self.assertEqual(3, len(lines))
-        self.assertRegex(lines[2], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\]( {re.escape(CODEX_2W_SHORT_DATE)})?$")
+        self.assertEqual(4, len(lines))
+        self.assertRegex(lines[0], r"^codex-repo@.+$")
+        self.assertRegex(lines[3], rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\]( {re.escape(CODEX_2W_SHORT_DATE)})?$")
 
     def test_codex_no_session_graceful(self):
         """No session file at all — should not crash."""
@@ -921,6 +1122,7 @@ class CodexStatusLineTests(unittest.TestCase):
     def test_codex_git_dirty_diff(self):
         (self.repo / "tracked.txt").write_text("base\nchange\n")
         output = self._run_codex(budget=150)
+        self.assertIn("git feat/codex-test", output)
         self.assertRegex(output, r"\(\+\d+ -\d+\)")
 
     def test_codex_empty_session_dir(self):
@@ -945,9 +1147,10 @@ class CodexStatusLineTests(unittest.TestCase):
             extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
         )
         lines = output.splitlines()
-        self.assertEqual(3, len(lines))
-        self.assertEqual("5h unavailable", lines[1])
-        self.assertEqual("weekly unavailable", lines[2])
+        self.assertEqual(4, len(lines))
+        self.assertEqual("codex-repo@feat/codex-test", lines[0])
+        self.assertEqual("5h unavailable", lines[2])
+        self.assertEqual("weekly unavailable", lines[3])
 
     def test_codex_bars_layout_null_rate_limits_uses_unavailable_copy(self):
         session_file = self.session_dir / "rollout-test.jsonl"
@@ -959,9 +1162,9 @@ class CodexStatusLineTests(unittest.TestCase):
             extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
         )
         lines = output.splitlines()
-        self.assertEqual(3, len(lines))
-        self.assertEqual("5h unavailable", lines[1])
-        self.assertEqual("weekly unavailable", lines[2])
+        self.assertEqual(4, len(lines))
+        self.assertEqual("5h unavailable", lines[2])
+        self.assertEqual("weekly unavailable", lines[3])
 
     def test_codex_bars_layout_dots_style(self):
         output = self._run_codex(
@@ -972,9 +1175,83 @@ class CodexStatusLineTests(unittest.TestCase):
             },
         )
         lines = output.splitlines()
-        self.assertEqual(3, len(lines))
-        self.assertIn("\u25cf", lines[1])  # ●
-        self.assertIn("\u25cb", lines[1])  # ○
+        self.assertEqual(4, len(lines))
+        self.assertIn("\u25cf", lines[2])  # ●
+        self.assertIn("\u25cb", lines[2])  # ○
+
+    def test_codex_bars_git_line_uses_muted_palette(self):
+        raw_output = self._run_codex(
+            budget=120,
+            raw=True,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+        )
+        git_line = raw_output.splitlines()[0]
+
+        self.assertIn("[38;2;115;132;139m", git_line)
+        self.assertNotIn("[38;2;77;175;176m", git_line)
+        self.assertNotIn("[38;2;196;208;212m", git_line)
+
+    def test_codex_bars_layout_line_selection_matches_new_order(self):
+        git_line = self._run_codex(
+            budget=120,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+            args=["--line", "1"],
+        ).strip()
+        weekly_line = self._run_codex(
+            budget=120,
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+            args=["--line", "4"],
+        ).strip()
+
+        self.assertEqual("codex-repo@feat/codex-test", git_line)
+        self.assertRegex(weekly_line, rf"^weekly {CODEX_WEEKLY_LEFT}% left \[[=\-]+\] {re.escape(CODEX_2W_TIME)}$")
+
+    def test_codex_tmux_launcher_hides_git_line_with_env(self):
+        tmux_lines = self._run_codex_tmux_launcher(
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_GIT_LINE": "false",
+            },
+        )
+        joined = "\n".join(tmux_lines)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus\t3", joined)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus-format[0]\t  #(", joined)
+        self.assertIn("--line 2)", joined)
+        self.assertIn("status-format[1]", joined)
+        self.assertIn("--line 3)", joined)
+        self.assertIn("status-format[2]", joined)
+        self.assertIn("--line 4)", joined)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus-format[3]\t", joined)
+
+    def test_codex_tmux_launcher_hides_both_top_lines_with_config(self):
+        tmux_lines = self._run_codex_tmux_launcher(
+            extra_env={"CODEX_STATUSLINE_LAYOUT": "bars"},
+            config_statusline='layout = "bars"\nshow_git_line = false\nshow_overview_line = false\n',
+        )
+        joined = "\n".join(tmux_lines)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus\t2", joined)
+        self.assertIn("status-format[0]", joined)
+        self.assertIn("--line 3)", joined)
+        self.assertIn("status-format[1]", joined)
+        self.assertIn("--line 4)", joined)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus-format[2]\t", joined)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus-format[3]\t", joined)
+
+    def test_codex_tmux_launcher_visibility_env_overrides_config(self):
+        tmux_lines = self._run_codex_tmux_launcher(
+            extra_env={
+                "CODEX_STATUSLINE_LAYOUT": "bars",
+                "CODEX_STATUSLINE_SHOW_GIT_LINE": "true",
+                "CODEX_STATUSLINE_SHOW_OVERVIEW_LINE": "true",
+            },
+            config_statusline='layout = "bars"\nshow_git_line = false\nshow_overview_line = false\n',
+        )
+        joined = "\n".join(tmux_lines)
+        self.assertIn("set-option\t-t\tcodex-codex-repo\t-q\tstatus\t4", joined)
+        self.assertIn("--line 1)", joined)
+        self.assertIn("--line 2)", joined)
+        self.assertIn("--line 3)", joined)
+        self.assertIn("--line 4)", joined)
 
     def test_codex_unknown_layout_falls_back_to_compact(self):
         default_output = self._run_codex(budget=100)
