@@ -73,3 +73,12 @@ Tests in `tests/test_statusline.py` exercise both scripts by piping JSON stdin a
 ## Commit Style
 
 Use short Conventional Commit subjects with emoji prefixes: `feat:`, `fix:`, `docs:`, etc.
+
+<!-- chinese-language-config:start -->
+## Language
+Use **Chinese** for:
+- Task execution results and error messages
+- Confirmations and clarifications with the user
+- Solution descriptions and to-do items
+- Commit info for git
+<!-- chinese-language-config:end -->

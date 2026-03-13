@@ -28,3 +28,12 @@ Add or update tests in [`tests/test_statusline.py`](/Users/nowcoder/Documents/My
 Recent history uses short Conventional Commit subjects, often with emoji prefixes, for example `✨ feat: ...`, `📝 docs: ...`, and `fix: ...`. Follow that pattern and keep each commit focused on one logical change.
 
 PRs should explain the user-visible effect, note which environments were tested (`bash`, `pwsh`, macOS/Linux/Windows if applicable), and include an updated screenshot when output formatting changes. Update [`README.md`](/Users/nowcoder/Documents/MyCode/services/ai-coding-status-line/README.md) whenever you add or change environment variables, layouts, or theme options.
+
+<!-- chinese-language-config:start -->
+## Language
+Use **Chinese** for:
+- Task execution results and error messages
+- Confirmations and clarifications with the user
+- Solution descriptions and to-do items
+- Commit info for git
+<!-- chinese-language-config:end -->
