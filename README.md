@@ -11,6 +11,7 @@
 <p align="center">
   <a href="#-claude-code">Claude Code</a>&nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#-codex-cli">Codex CLI</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="#-statusline-skill">Skill</a>&nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#-布局与样式">布局</a>&nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#-主题">主题</a>&nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#-常见问题">FAQ</a>
@@ -46,7 +47,7 @@ cd AICodingStatusLine
 
 **显示内容：** 模型名 | Git 分支(+N -N) | ctx 使用率 | 推理努力 | 5h 限制 | 7d 限制 | extra 用量
 
-**配置方式：** 通过 `~/.claude/settings.json` 的 `env` 字段设置环境变量。
+**配置方式：** 在 Claude Code 对话中输入 `/statusline` 交互式管理，或手动编辑 `~/.claude/settings.json` 的 `env` 字段。
 
 > **详细安装步骤、完整配置参考、手动安装（含 Windows）请看 → [docs/claude-code.md](docs/claude-code.md)**
 
@@ -112,6 +113,38 @@ show_overview_line = true
 ```bash
 ./install.sh --uninstall
 ```
+
+---
+
+## 🛠 /statusline Skill
+
+在 Claude Code 对话中直接管理状态栏配置，无需手动编辑 JSON。安装 skill 后输入 `/statusline` 即可使用。
+
+**安装：** 将 `skills/statusline/` 目录复制到 `~/.claude/skills/statusline/`。
+
+**命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `/statusline` | 展示当前配置 + 可用命令 |
+| `/statusline show` | 仅展示当前配置表格 |
+| `/statusline theme [值]` | 查看/切换主题（9 种，支持模糊匹配） |
+| `/statusline layout [值]` | 查看/切换布局（compact / bars） |
+| `/statusline bar-style [值]` | 查看/切换进度条样式（7 种 + 自定义） |
+| `/statusline max-width [值\|auto]` | 设置宽度预算 |
+| `/statusline time-format [值]` | 设置 7d 时间格式（strftime） |
+| `/statusline reset` | 恢复所有配置为默认值 |
+| `/statusline preview [主题]` | ANSI 色块预览主题色板 |
+
+**特性：**
+
+- 模糊匹配：`drac` → `dracula`、`sol` → `solarized`
+- 智能联动：改 `bar-style` 时提醒切换到 `bars` 布局；选 `bars` 布局时推荐非 ascii 样式
+- 变更前后对比：每次修改显示旧值 → 新值
+- 主题预览：输出 ANSI 色块展示 9 个颜色角色
+- 组合推荐：说"推荐暗色主题"可获得主题 + 布局 + 样式的预设方案
+
+> `/statusline` 仅适用于 Claude Code。Codex CLI 的配置请直接编辑 `~/.codex/config.toml`。
 
 ---
 
