@@ -31,10 +31,14 @@
 ### 方式一：Claude Code Plugin（推荐）
 
 ```bash
-claude plugin add https://github.com/kaelinda/AICodingStatusLine.git
+# 1. 添加 Marketplace
+claude plugin marketplace add https://github.com/kaelinda/AICodingStatusLine.git
+
+# 2. 安装插件
+claude plugin install aicoding-statusline
 ```
 
-插件安装后会自动执行 `post-install.sh`，完成脚本复制、依赖检查和 `settings.json` 配置。
+安装后每次启动 Claude Code 会自动检查并配置状态栏（幂等，仅首次或脚本更新时执行）。
 
 ### 方式二：手动安装
 
@@ -261,7 +265,8 @@ show_overview_line = true
 
 ```
 ├── .claude-plugin/
-│   └── manifest.json        # Claude Code Plugin 清单
+│   ├── plugin.json          # Claude Code Plugin 清单
+│   └── marketplace.json     # Marketplace 注册清单
 ├── scripts/
 │   ├── statusline.sh        # Claude Code 状态栏（Bash）
 │   ├── statusline.ps1       # Claude Code 状态栏（PowerShell）
@@ -269,7 +274,7 @@ show_overview_line = true
 │   ├── codex_tmux.sh        # Codex tmux 启动器
 │   ├── codex_tmux_status.sh # Codex tmux 状态栏渲染
 │   ├── codex_statusline_common.sh  # Codex 公共函数库
-│   └── post-install.sh      # 插件安装后钩子
+│   └── post-install.sh      # SessionStart hook（幂等安装脚本）
 ├── skills/
 │   └── statusline/          # /statusline Skill
 ├── install.sh               # 手动一键安装脚本

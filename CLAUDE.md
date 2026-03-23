@@ -70,6 +70,31 @@ When output exceeds `max_width`, segments collapse in a fixed priority order:
 
 Tests in `tests/test_statusline.py` exercise both scripts by piping JSON stdin and checking stripped-ANSI output. They set up temporary git repos, write usage cache files, and validate width budgeting, layout modes, theme isolation, bar style glyphs, and Bash/PowerShell parity. Run the test suite before any PR that touches layout, truncation, or theme logic.
 
+## Plugin System
+
+The project is a Claude Code plugin with `.claude-plugin/plugin.json` (plugin manifest) and `.claude-plugin/marketplace.json` (marketplace registry). Key points:
+
+- **plugin.json**: Must use valid lifecycle events for hooks (e.g., `SessionStart`, `PostToolUse`). There is no `postInstall` event — use `SessionStart` with idempotent scripts instead.
+- **marketplace.json**: The `source` field inside `plugins[]` uses `"source": "url"` (not `"type": "url"`). Top-level `description` is not a valid field.
+- **Validation**: Run `claude plugin validate .` before committing plugin manifest changes.
+- **post-install.sh**: Runs as `SessionStart` hook. Must be idempotent — uses `cmp` file comparison and stamp file to skip on subsequent sessions.
+
+## GitHub Release Workflow
+
+```bash
+# 1. Update version in .claude-plugin/plugin.json
+# 2. Run tests
+python3 tests/test_statusline.py
+
+# 3. Commit, push
+git push origin main
+
+# 4. Create release (GITHUB_TOKEN env var has no scopes — must unset it to use keyring token)
+GITHUB_TOKEN="" gh release create v<VERSION> --repo kaelinda/AICodingStatusLine --title "v<VERSION>" --notes "..."
+```
+
+Note: The `GITHUB_TOKEN` environment variable (set by Claude Code session) has no scopes. To create releases, unset it so `gh` falls back to the keyring token which has `repo` scope.
+
 ## Commit Style
 
 Use short Conventional Commit subjects with emoji prefixes: `feat:`, `fix:`, `docs:`, etc.
