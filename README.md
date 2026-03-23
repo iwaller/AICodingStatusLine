@@ -28,6 +28,16 @@
 
 ## 🚀 快速安装
 
+### 方式一：Claude Code Plugin（推荐）
+
+```bash
+claude plugin add https://github.com/kaelinda/AICodingStatusLine.git
+```
+
+插件安装后会自动执行 `post-install.sh`，完成脚本复制、依赖检查和 `settings.json` 配置。
+
+### 方式二：手动安装
+
 ```bash
 git clone https://github.com/kaelinda/AICodingStatusLine.git
 cd AICodingStatusLine
@@ -96,8 +106,6 @@ show_overview_line = true
 ## 🛠 /statusline Skill
 
 在 Claude Code 对话中直接管理状态栏配置，无需手动编辑 JSON。
-
-**安装：** 将 `skills/statusline/` 目录复制到 `~/.claude/skills/statusline/`。
 
 **命令：**
 
@@ -249,10 +257,32 @@ show_overview_line = true
 
 ---
 
+## 📁 项目结构
+
+```
+├── .claude-plugin/
+│   └── manifest.json        # Claude Code Plugin 清单
+├── scripts/
+│   ├── statusline.sh        # Claude Code 状态栏（Bash）
+│   ├── statusline.ps1       # Claude Code 状态栏（PowerShell）
+│   ├── codex_statusline.sh  # Codex CLI 状态栏
+│   ├── codex_tmux.sh        # Codex tmux 启动器
+│   ├── codex_tmux_status.sh # Codex tmux 状态栏渲染
+│   ├── codex_statusline_common.sh  # Codex 公共函数库
+│   └── post-install.sh      # 插件安装后钩子
+├── skills/
+│   └── statusline/          # /statusline Skill
+├── install.sh               # 手动一键安装脚本
+└── tests/
+    └── test_statusline.py   # 测试套件（75 项）
+```
+
+---
+
 ## 🧪 测试
 
 ```bash
-python3 -m pytest tests/test_statusline.py                          # 完整测试套件
+python3 tests/test_statusline.py                                     # 完整测试套件
 printf '%s' '{"cwd":"/tmp","model":{"display_name":"Opus 4.6"}}' | ./scripts/statusline.sh  # Claude Code 冒烟测试
 CODEX_MODEL_NAME=gpt-5.4 ./scripts/codex_statusline.sh .            # Codex 冒烟测试
 ```
