@@ -1,0 +1,17 @@
+{
+  "name": "aicoding-statusline-marketplace",
+"owner": {
+    "name": "kaelinda"
+  },
+  "plugins": [
+    {
+      "name": "aicoding-statusline",
+      "description": "Claude Code & Codex CLI 状态栏 — 主题、布局、进度条、用量显示",
+      "version": "2.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/kaelinda/AICodingStatusLine.git"
+      }
+    }
+  ]
+}
