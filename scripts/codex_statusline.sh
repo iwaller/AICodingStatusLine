@@ -50,6 +50,18 @@ case "$layout_name" in
     bars|compact) ;;
     *) layout_name="bars" ;;
 esac
+segments_raw="${CODEX_STATUSLINE_SEGMENTS:-}"
+segments_filter_active=0
+segments_csv=""
+if [ -n "$segments_raw" ]; then
+    segments_filter_active=1
+    segments_csv=",$(printf '%s' "$segments_raw" | tr -d '[:space:]'),"
+fi
+segment_enabled() {
+    [ "$segments_filter_active" -eq 0 ] && return 0
+    case "$segments_csv" in *,"$1",*) return 0 ;; esac
+    return 1
+}
 case "$bar_style_name" in
     dots)
         bar_filled_char='●'
@@ -670,23 +682,29 @@ compose_segments() {
     segment_plains=()
     BRANCH_SEGMENT_LEN=0
 
-    build_model_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    if segment_enabled "model"; then
+        build_model_segment
+        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    fi
 
-    build_eff_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    if segment_enabled "eff"; then
+        build_eff_segment
+        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    fi
 
-    build_ctx_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    if segment_enabled "ctx"; then
+        build_ctx_segment
+        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    fi
 
-    if [ "$include_repo_segment" -eq 1 ]; then
+    if [ "$include_repo_segment" -eq 1 ] && segment_enabled "git"; then
         build_repo_segment
         if [ -n "$SEG_PLAIN" ]; then
             add_segment "$SEG_TEXT" "$SEG_PLAIN"
         fi
     fi
 
-    if [ "$include_branch_segment" -eq 1 ]; then
+    if [ "$include_branch_segment" -eq 1 ] && segment_enabled "git"; then
         build_branch_segment
         if [ -n "$SEG_PLAIN" ]; then
             BRANCH_SEGMENT_LEN=${#SEG_PLAIN}
@@ -702,10 +720,12 @@ compose_segments() {
     fi
 
     if [ "$include_usage_segments" -eq 1 ]; then
-        build_five_hour_segment
-        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        if segment_enabled "5h"; then
+            build_five_hour_segment
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
 
-        if [ "$show_seven_day" -eq 1 ]; then
+        if [ "$show_seven_day" -eq 1 ] && segment_enabled "7d"; then
             build_seven_day_segment
             add_segment "$SEG_TEXT" "$SEG_PLAIN"
         fi
@@ -903,6 +923,7 @@ build_bars_line() {
             build_bars_overview_line
             ;;
         3)
+            segment_enabled "5h" || return
             if [ "$usage_available" -eq 1 ]; then
                 build_usage_bar_line "5h" "$five_hour_remaining_pct" "${five_hour_remaining_pct}% left" "$full_five_time" ""
             else
@@ -910,6 +931,7 @@ build_bars_line() {
             fi
             ;;
         4)
+            segment_enabled "7d" || return
             if [ "$usage_available" -eq 1 ]; then
                 build_usage_bar_line "$weekly_label" "$seven_day_remaining_pct" "${seven_day_remaining_pct}% left" "$full_seven_time" "$short_seven_time"
             else

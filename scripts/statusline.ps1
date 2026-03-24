@@ -14,6 +14,20 @@ $barStyleName = if ($env:CLAUDE_CODE_STATUSLINE_BAR_STYLE) { $env:CLAUDE_CODE_ST
 $pctMode = if ($env:CLAUDE_CODE_STATUSLINE_PCT_MODE) { $env:CLAUDE_CODE_STATUSLINE_PCT_MODE } else { "used" }
 if ($pctMode -notin @("used", "left")) { $pctMode = "used" }
 if ($layoutName -notin @("compact", "bars")) { $layoutName = "bars" }
+$segmentsRaw = $env:CLAUDE_CODE_STATUSLINE_SEGMENTS
+$segmentsFilterActive = $false
+$visibleSegments = @{}
+if ($segmentsRaw) {
+    $segmentsFilterActive = $true
+    foreach ($seg in ($segmentsRaw -split ',')) {
+        $seg = $seg.Trim()
+        if ($seg) { $visibleSegments[$seg] = $true }
+    }
+}
+function Test-SegmentEnabled([string]$name) {
+    if (-not $script:segmentsFilterActive) { return $true }
+    return $script:visibleSegments.ContainsKey($name)
+}
 switch -Wildcard ($barStyleName) {
     "dots" {
         $barFilledChar = [string][char]0x25CF
@@ -449,24 +463,34 @@ function Compose-Output {
     $segments = [System.Collections.Generic.List[object]]::new()
     $script:gitSegmentLen = 0
 
-    $segments.Add((Build-ModelSegment))
-    $segments.Add((Build-EffSegment))
-
-    $gitSegment = Build-GitSegment
-    if ($gitSegment) {
-        $script:gitSegmentLen = $gitSegment.Plain.Length
-        $segments.Add($gitSegment)
+    if (Test-SegmentEnabled "model") {
+        $segments.Add((Build-ModelSegment))
+    }
+    if (Test-SegmentEnabled "eff") {
+        $segments.Add((Build-EffSegment))
     }
 
-    $segments.Add((Build-CtxSegment))
+    if (Test-SegmentEnabled "git") {
+        $gitSegment = Build-GitSegment
+        if ($gitSegment) {
+            $script:gitSegmentLen = $gitSegment.Plain.Length
+            $segments.Add($gitSegment)
+        }
+    }
+
+    if (Test-SegmentEnabled "ctx") {
+        $segments.Add((Build-CtxSegment))
+    }
     if ($script:includeUsageSummary) {
-        $segments.Add((Build-FiveHourSegment))
-        if ($script:showSevenDay) {
+        if (Test-SegmentEnabled "5h") {
+            $segments.Add((Build-FiveHourSegment))
+        }
+        if ($script:showSevenDay -and (Test-SegmentEnabled "7d")) {
             $segments.Add((Build-SevenDaySegment))
         }
     }
 
-    if ($script:showExtra) {
+    if ($script:showExtra -and (Test-SegmentEnabled "extra")) {
         $extraSegment = Build-ExtraSegment
         if ($extraSegment) {
             $segments.Add($extraSegment)
@@ -583,19 +607,33 @@ function Render-CompactOutput([bool]$includeUsage) {
 function Render-BarsOutput {
     Render-CompactOutput $false
     $topLine = $script:outputText
+    $barLines = @()
 
     $suffix = Get-PctSuffix
-    if ($script:usageAvailable) {
-        $fiveDisp = Get-DisplayPct $script:fiveHourPct
-        $sevenDisp = Get-DisplayPct $script:sevenDayPct
-        $fiveLine = Build-UsageBarLine "5h" $script:fiveHourPct "${fiveDisp}%${suffix}" $script:fiveHourReset $null
-        $sevenLine = Build-UsageBarLine "7d" $script:sevenDayPct "${sevenDisp}%${suffix}" $script:sevenDayReset $script:sevenDayDate
-    } else {
-        $fiveLine = Build-UsageBarLine "5h" 0 "--" "n/a" $null
-        $sevenLine = Build-UsageBarLine "7d" 0 "--" "n/a" $null
+    if (Test-SegmentEnabled "5h") {
+        if ($script:usageAvailable) {
+            $fiveDisp = Get-DisplayPct $script:fiveHourPct
+            $fiveLine = Build-UsageBarLine "5h" $script:fiveHourPct "${fiveDisp}%${suffix}" $script:fiveHourReset $null
+        } else {
+            $fiveLine = Build-UsageBarLine "5h" 0 "--" "n/a" $null
+        }
+        $barLines += $fiveLine.Text
     }
 
-    $script:outputText = $topLine + "`n" + $fiveLine.Text + "`n" + $sevenLine.Text
+    if (Test-SegmentEnabled "7d") {
+        if ($script:usageAvailable) {
+            $sevenDisp = Get-DisplayPct $script:sevenDayPct
+            $sevenLine = Build-UsageBarLine "7d" $script:sevenDayPct "${sevenDisp}%${suffix}" $script:sevenDayReset $script:sevenDayDate
+        } else {
+            $sevenLine = Build-UsageBarLine "7d" 0 "--" "n/a" $null
+        }
+        $barLines += $sevenLine.Text
+    }
+
+    $script:outputText = $topLine
+    foreach ($bl in $barLines) {
+        $script:outputText += "`n" + $bl
+    }
 }
 
 $data = $input | ConvertFrom-Json

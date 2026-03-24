@@ -627,6 +627,64 @@ class StatusLineTests(unittest.TestCase):
         self.assertRegex(pwsh_lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] {re.escape(DEFAULT_7D_TIME)}$")
 
 
+    def test_segments_filter_hides_model(self):
+        output = self._run_shell(budget=150, extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "eff,git,ctx,5h,7d",
+        })
+        self.assertNotIn("Opus 4.6", output)
+        self.assertIn("eff low", output)
+        self.assertIn("ctx", output)
+
+    def test_segments_filter_hides_5h_and_7d(self):
+        output = self._run_shell(budget=150, extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "model,eff,git,ctx",
+        })
+        self.assertIn("Opus 4.6", output)
+        self.assertNotIn("5h ", output)
+        self.assertNotIn("7d ", output)
+
+    def test_segments_filter_empty_shows_all(self):
+        output = self._run_shell(budget=145, extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "",
+        })
+        self.assertIn("Opus 4.6", output)
+        self.assertIn("eff low", output)
+        self.assertIn("5h ", output)
+        self.assertIn("7d ", output)
+
+    def test_segments_filter_only_model(self):
+        output = self._run_shell(budget=150, extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "model",
+        })
+        self.assertIn("Opus 4.6", output)
+        self.assertNotIn("eff", output)
+        self.assertNotIn("ctx", output)
+        self.assertNotIn("5h", output)
+
+    def test_segments_filter_bars_hides_5h_bar_line(self):
+        output = self._run_shell(budget=120, layout="bars", extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "model,eff,git,ctx,7d",
+        })
+        lines = output.splitlines()
+        self.assertEqual(2, len(lines))
+        self.assertNotIn("5h", output)
+
+    def test_segments_filter_bars_hides_both_bars(self):
+        output = self._run_shell(budget=120, layout="bars", extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "model,eff,git,ctx",
+        })
+        lines = output.splitlines()
+        self.assertEqual(1, len(lines))
+
+    def test_segments_filter_with_spaces(self):
+        output = self._run_shell(budget=150, extra_env={
+            "CLAUDE_CODE_STATUSLINE_SEGMENTS": "model, eff, ctx",
+        })
+        self.assertIn("Opus 4.6", output)
+        self.assertIn("eff low", output)
+        self.assertIn("ctx", output)
+        self.assertNotIn("5h", output)
+
     def test_past_reset_time_is_hidden(self):
         past_usage = {
             "five_hour": {"utilization": 83, "resets_at": "2020-01-01T02:00:00Z"},
@@ -1273,6 +1331,27 @@ class CodexStatusLineTests(unittest.TestCase):
             extra_env={"CODEX_STATUSLINE_LAYOUT": "mystery"},
         )
         self.assertEqual(bars_output, unknown_output)
+
+    def test_codex_segments_filter_hides_model(self):
+        output = self._run_codex(budget=150, extra_env={
+            "CODEX_STATUSLINE_SEGMENTS": "eff,ctx,git,5h,7d",
+        })
+        self.assertNotIn("gpt-5.4", output)
+        self.assertIn("eff", output)
+
+    def test_codex_segments_filter_empty_shows_all(self):
+        output = self._run_codex(budget=150, extra_env={
+            "CODEX_STATUSLINE_SEGMENTS": "",
+        })
+        self.assertIn("gpt-5.4", output)
+        self.assertIn("eff", output)
+
+    def test_codex_segments_filter_hides_5h_and_7d(self):
+        output = self._run_codex(budget=150, extra_env={
+            "CODEX_STATUSLINE_SEGMENTS": "model,eff,ctx",
+        })
+        self.assertNotIn("5h", output)
+        self.assertNotIn("weekly", output)
 
     def test_codex_all_themes_same_plain_text(self):
         default_plain = self._run_codex(budget=100)

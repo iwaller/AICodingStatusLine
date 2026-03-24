@@ -119,6 +119,7 @@ Codex 支持两种配置方式，**环境变量优先级高于 config.toml**。
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
+| `CODEX_STATUSLINE_SEGMENTS` | (全部) | 逗号分隔的可见段落列表：`model,eff,git,ctx,5h,7d`。未设置则显示全部 |
 | `CODEX_STATUSLINE_THEME` | `default` | 主题（与 Claude Code 相同的 9 种） |
 | `CODEX_STATUSLINE_LAYOUT` | `bars` | 布局：`bars` 或 `compact` |
 | `CODEX_STATUSLINE_BAR_STYLE` | `ascii` | 进度条样式（见 [README 进度条样式](../README.md#-布局与样式)），支持 `custom:填充:空白` 自定义 |

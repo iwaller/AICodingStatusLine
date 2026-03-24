@@ -55,6 +55,7 @@ When output exceeds `max_width`, segments collapse in a fixed priority order:
 
 ### Layouts and Configuration
 
+- `CLAUDE_CODE_STATUSLINE_SEGMENTS`: comma-separated list of visible segments (`model,eff,git,ctx,5h,7d,extra`). Unset = show all. Script checks `segment_enabled()` before building each segment.
 - `CLAUDE_CODE_STATUSLINE_LAYOUT`: `bars` (default, overview line + two progress-bar lines for 5h/7d) or `compact` (single-line)
 - `CLAUDE_CODE_STATUSLINE_BAR_STYLE`: `ascii` (default), `dots`, `squares` -- only affects `bars` layout
 - `CLAUDE_CODE_STATUSLINE_THEME`: `default` or `forest` -- changes ANSI color palette

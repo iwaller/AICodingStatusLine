@@ -117,10 +117,14 @@ show_overview_line = true
 |------|------|
 | `/statusline` | 展示当前配置 + 可用命令 |
 | `/statusline show` | 仅展示当前配置表格 |
-| `/statusline theme [值]` | 查看/切换主题（9 种，支持模糊匹配） |
-| `/statusline layout [值]` | 查看/切换布局（compact / bars） |
-| `/statusline bar-style [值]` | 查看/切换进度条样式（7 种 + 自定义） |
-| `/statusline pct-mode [值]` | 切换百分比模式（used / left） |
+| `/statusline segments` | 交互式多选段落可见性（`[x]/[ ]` checkbox） |
+| `/statusline segments show <name>` | 显示指定段落 |
+| `/statusline segments hide <name>` | 隐藏指定段落 |
+| `/statusline segments reset` | 重置段落（显示全部） |
+| `/statusline theme [值]` | 单选主题（`(●)/( )` radio，9 种，支持模糊匹配） |
+| `/statusline layout [值]` | 单选布局（`bars` / `compact`） |
+| `/statusline bar-style [值]` | 单选进度条样式（7 种 + 自定义） |
+| `/statusline pct-mode [值]` | 单选百分比模式（`used` / `left`） |
 | `/statusline max-width [值\|auto]` | 设置宽度预算 |
 | `/statusline time-format [值]` | 设置 7d 时间格式（strftime） |
 | `/statusline reset` | 恢复所有配置为默认值 |
@@ -129,6 +133,7 @@ show_overview_line = true
 
 **特性：**
 
+- 交互式选择：段落 checkbox 多选、主题/布局 radio 单选，类似 Codex CLI 风格
 - 模糊匹配：`drac` → `dracula`、`sol` → `solarized`
 - 智能联动：改 `bar-style` 时提醒切换到 `bars` 布局；选 `bars` 布局时推荐非 ascii 样式
 - 变更前后对比：每次修改显示旧值 → 新值

@@ -21,6 +21,18 @@ case "$layout_name" in
     bars|compact) ;;
     *) layout_name="bars" ;;
 esac
+segments_raw="${CLAUDE_CODE_STATUSLINE_SEGMENTS:-}"
+segments_filter_active=0
+segments_csv=""
+if [ -n "$segments_raw" ]; then
+    segments_filter_active=1
+    segments_csv=",$(printf '%s' "$segments_raw" | tr -d '[:space:]'),"
+fi
+segment_enabled() {
+    [ "$segments_filter_active" -eq 0 ] && return 0
+    case "$segments_csv" in *,"$1",*) return 0 ;; esac
+    return 1
+}
 case "$bar_style_name" in
     dots)
         bar_filled_char='●'
@@ -305,32 +317,42 @@ compose_segments() {
     segment_plains=()
     GIT_SEGMENT_LEN=0
 
-    build_model_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
-
-    build_eff_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
-
-    build_git_segment
-    if [ -n "$SEG_PLAIN" ]; then
-        GIT_SEGMENT_LEN=${#SEG_PLAIN}
+    if segment_enabled "model"; then
+        build_model_segment
         add_segment "$SEG_TEXT" "$SEG_PLAIN"
     fi
 
-    build_ctx_segment
-    add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    if segment_enabled "eff"; then
+        build_eff_segment
+        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    fi
+
+    if segment_enabled "git"; then
+        build_git_segment
+        if [ -n "$SEG_PLAIN" ]; then
+            GIT_SEGMENT_LEN=${#SEG_PLAIN}
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
+    fi
+
+    if segment_enabled "ctx"; then
+        build_ctx_segment
+        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+    fi
 
     if [ "$include_usage_summary" -eq 1 ]; then
-        build_five_hour_segment
-        add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        if segment_enabled "5h"; then
+            build_five_hour_segment
+            add_segment "$SEG_TEXT" "$SEG_PLAIN"
+        fi
 
-        if [ "$show_seven_day" -eq 1 ]; then
+        if [ "$show_seven_day" -eq 1 ] && segment_enabled "7d"; then
             build_seven_day_segment
             add_segment "$SEG_TEXT" "$SEG_PLAIN"
         fi
     fi
 
-    if [ "$show_extra" -eq 1 ]; then
+    if [ "$show_extra" -eq 1 ] && segment_enabled "extra"; then
         build_extra_segment
         if [ -n "$SEG_PLAIN" ]; then
             add_segment "$SEG_TEXT" "$SEG_PLAIN"
@@ -597,26 +619,36 @@ render_bars_output() {
 
     render_compact_output 0
     local top_line="$OUTPUT_TEXT"
+    local bar_lines=()
 
-    local five_disp seven_disp suffix
-    suffix=$(pct_suffix)
-    if [ "$usage_available" -eq 1 ]; then
-        five_disp=$(display_pct "$five_hour_pct")
-        build_usage_bar_line "5h" "$five_hour_pct" "${five_disp}%${suffix}" "$full_five_time" ""
-    else
-        build_usage_bar_line "5h" 0 "--" "n/a" ""
+    if segment_enabled "5h"; then
+        local five_disp suffix
+        suffix=$(pct_suffix)
+        if [ "$usage_available" -eq 1 ]; then
+            five_disp=$(display_pct "$five_hour_pct")
+            build_usage_bar_line "5h" "$five_hour_pct" "${five_disp}%${suffix}" "$full_five_time" ""
+        else
+            build_usage_bar_line "5h" 0 "--" "n/a" ""
+        fi
+        bar_lines+=("$LINE_TEXT")
     fi
-    local five_line="$LINE_TEXT"
 
-    if [ "$usage_available" -eq 1 ]; then
-        seven_disp=$(display_pct "$seven_day_pct")
-        build_usage_bar_line "7d" "$seven_day_pct" "${seven_disp}%${suffix}" "$full_seven_time" "$short_seven_time"
-    else
-        build_usage_bar_line "7d" 0 "--" "n/a" ""
+    if segment_enabled "7d"; then
+        local seven_disp suffix
+        suffix=$(pct_suffix)
+        if [ "$usage_available" -eq 1 ]; then
+            seven_disp=$(display_pct "$seven_day_pct")
+            build_usage_bar_line "7d" "$seven_day_pct" "${seven_disp}%${suffix}" "$full_seven_time" "$short_seven_time"
+        else
+            build_usage_bar_line "7d" 0 "--" "n/a" ""
+        fi
+        bar_lines+=("$LINE_TEXT")
     fi
-    local seven_line="$LINE_TEXT"
 
-    OUTPUT_TEXT="${top_line}"$'\n'"${five_line}"$'\n'"${seven_line}"
+    OUTPUT_TEXT="$top_line"
+    for bl in "${bar_lines[@]}"; do
+        OUTPUT_TEXT+=$'\n'"$bl"
+    done
 }
 
 get_oauth_token() {
