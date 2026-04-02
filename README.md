@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kaelinda/AICodingStatusLine/releases"><img src="https://img.shields.io/github/v/release/kaelinda/AICodingStatusLine?style=flat-square" alt="Release"></a>
-  <a href="#-license"><img src="https://img.shields.io/github/license/kaelinda/AICodingStatusLine?style=flat-square" alt="License"></a>
+  <a href="https://github.com/iwaller/AICodingStatusLine/releases"><img src="https://img.shields.io/github/v/release/iwaller/AICodingStatusLine?style=flat-square" alt="Release"></a>
+  <a href="#-license"><img src="https://img.shields.io/github/license/iwaller/AICodingStatusLine?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 
 ```bash
 # 1. 添加 Marketplace
-claude plugin marketplace add https://github.com/kaelinda/AICodingStatusLine.git
+claude plugin marketplace add https://github.com/iwaller/AICodingStatusLine.git
 
 # 2. 安装插件
 claude plugin install aicoding-statusline
@@ -43,7 +43,7 @@ claude plugin install aicoding-statusline
 ### 方式二：手动安装
 
 ```bash
-git clone https://github.com/kaelinda/AICodingStatusLine.git
+git clone https://github.com/iwaller/AICodingStatusLine.git
 cd AICodingStatusLine
 ./install.sh                       # Claude Code（默认）
 ./install.sh --target codex        # Codex tmux 增强模式
@@ -468,4 +468,4 @@ MIT
 
 本项目 fork 自 [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)（原作者 Daniel Oliveira），在保留原始状态栏概念和跨平台脚本的基础上扩展了主题系统、多布局、进度条样式、Codex CLI 支持和 `/statusline` Skill。
 
-**Fork 维护：** [kaelinda/AICodingStatusLine](https://github.com/kaelinda/AICodingStatusLine)
+**Fork 维护：** [iwaller/AICodingStatusLine](https://github.com/iwaller/AICodingStatusLine)
