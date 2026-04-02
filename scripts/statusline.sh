@@ -527,7 +527,14 @@ build_usage_bar_line() {
         fi
     fi
 
-    local fixed_width=$(( ${#label} + 1 + ${#pct_text} + 1 + 2 ))
+    local pct_col_width=4
+    if [ "$pct_mode" = "left" ]; then
+        pct_col_width=8
+    fi
+    local pct_padded
+    printf -v pct_padded "%${pct_col_width}s" "$pct_text"
+
+    local fixed_width=$(( ${#label} + 1 + pct_col_width + 1 ))
     if [ -n "$time_text" ]; then
         fixed_width=$(( fixed_width + 1 + ${#time_text} ))
     fi
@@ -568,8 +575,8 @@ build_usage_bar_line() {
         filled_text="${pct_color}${filled_plain}${reset}"
     fi
 
-    LINE_PLAIN="${label} ${pct_text} [${filled_plain}${empty_plain}]"
-    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${secondary}${empty_plain}${reset}${dim}]${reset}"
+    LINE_PLAIN="${label} ${filled_plain}${empty_plain} ${pct_padded}"
+    LINE_TEXT="${dim}${label}${reset} ${filled_text}${secondary}${empty_plain}${reset} ${pct_color}${pct_padded}${reset}"
 
     if [ -n "$time_text" ]; then
         LINE_PLAIN+=" ${time_text}"
