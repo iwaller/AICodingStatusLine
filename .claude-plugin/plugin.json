@@ -1,12 +1,12 @@
 {
   "name": "aicoding-statusline",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Claude Code & Codex CLI 状态栏 — 主题、布局、进度条、用量显示",
   "author": {
-    "name": "kaelinda"
+    "name": "iwaller"
   },
-  "homepage": "https://github.com/kaelinda/AICodingStatusLine",
-  "repository": "https://github.com/kaelinda/AICodingStatusLine.git",
+  "homepage": "https://github.com/iwaller/AICodingStatusLine",
+  "repository": "https://github.com/iwaller/AICodingStatusLine.git",
   "license": "MIT",
   "hooks": {
     "SessionStart": [
