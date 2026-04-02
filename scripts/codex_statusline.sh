@@ -103,15 +103,15 @@ esac
 # Color palette — theme hex values (R;G;B triplets)
 # Mapped to either ANSI or tmux format below.
 case "$theme_name" in
-    forest)    _accent="120;196;120" _teal="94;170;150" _branch="214;224;205" _muted="132;144;124" _red="224;108;117" _orange="214;170;84" _yellow="198;183;101" _green="120;196;120" _white="234;238;228" ;;
-    dracula)   _accent="189;147;249" _teal="139;233;253" _branch="248;248;242" _muted="98;114;164" _red="255;85;85" _orange="255;184;108" _yellow="241;250;140" _green="80;250;123" _white="248;248;242" ;;
-    monokai)   _accent="102;217;239" _teal="166;226;46" _branch="230;219;116" _muted="117;113;94" _red="249;38;114" _orange="253;151;31" _yellow="230;219;116" _green="166;226;46" _white="248;248;242" ;;
-    solarized) _accent="38;139;210" _teal="42;161;152" _branch="147;161;161" _muted="88;110;117" _red="220;50;47" _orange="203;75;22" _yellow="181;137;0" _green="133;153;0" _white="238;232;213" ;;
-    ocean)     _accent="0;188;212" _teal="0;151;167" _branch="178;235;242" _muted="120;144;156" _red="239;83;80" _orange="255;152;0" _yellow="255;213;79" _green="102;187;106" _white="224;247;250" ;;
-    sunset)    _accent="255;138;101" _teal="255;183;77" _branch="255;204;128" _muted="161;136;127" _red="239;83;80" _orange="255;112;66" _yellow="255;213;79" _green="174;213;129" _white="255;243;224" ;;
+    forest)    _accent="120;196;120" _teal="94;170;150" _branch="214;224;205" _muted="138;150;130" _red="224;108;117" _orange="214;170;84" _yellow="198;183;101" _green="120;196;120" _white="234;238;228" ;;
+    dracula)   _accent="189;147;249" _teal="139;233;253" _branch="248;248;242" _muted="132;145;182" _red="255;85;85" _orange="255;184;108" _yellow="241;250;140" _green="80;250;123" _white="248;248;242" ;;
+    monokai)   _accent="102;217;239" _teal="166;226;46" _branch="230;219;116" _muted="153;147;101" _red="249;38;114" _orange="253;151;31" _yellow="230;219;116" _green="166;226;46" _white="248;248;242" ;;
+    solarized) _accent="38;139;210" _teal="42;161;152" _branch="147;161;161" _muted="133;149;150" _red="220;50;47" _orange="203;75;22" _yellow="181;137;0" _green="133;153;0" _white="238;232;213" ;;
+    ocean)     _accent="0;188;212" _teal="0;151;167" _branch="178;235;242" _muted="124;150;162" _red="239;83;80" _orange="255;152;0" _yellow="255;213;79" _green="102;187;106" _white="224;247;250" ;;
+    sunset)    _accent="255;138;101" _teal="255;183;77" _branch="255;204;128" _muted="167;140;127" _red="239;83;80" _orange="255;112;66" _yellow="255;213;79" _green="174;213;129" _white="255;243;224" ;;
     amber)     _accent="255;193;7" _teal="220;184;106" _branch="240;230;200" _muted="158;148;119" _red="232;98;92" _orange="232;152;62" _yellow="212;170;50" _green="140;179;105" _white="245;240;224" ;;
     rose)      _accent="244;143;177" _teal="206;147;216" _branch="248;215;224" _muted="173;139;159" _red="239;83;80" _orange="255;138;101" _yellow="255;213;79" _green="165;214;167" _white="253;232;239" ;;
-    *)         _accent="77;166;255" _teal="77;175;176" _branch="196;208;212" _muted="115;132;139" _red="255;85;85" _orange="255;176;85" _yellow="230;200;0" _green="0;160;0" _white="228;232;234" ;;
+    *)         _accent="77;166;255" _teal="77;175;176" _branch="196;208;212" _muted="133;149;155" _red="255;85;85" _orange="255;176;85" _yellow="230;200;0" _green="0;160;0" _white="228;232;234" ;;
 esac
 
 # Convert R;G;B triplets to output format
@@ -146,10 +146,15 @@ else
     reset='\033[0m'
 fi
 
+# Semantic aliases keep downstream segment builders readable.
+primary="$white"
+secondary="$muted"
+strong="$branch"
+
 sep_plain=' | '
 sep_text=" ${dim}|${reset} "
 default_two_week_time_format='%-m/%-d %-H:%M reset'
-seven_day_time_format='%m %d %H:%M'
+seven_day_time_format='%m/%d %H:%M'
 short_seven_day_date_format='%-m/%-d'
 weekly_label='weekly'
 
@@ -321,13 +326,18 @@ resolve_limits_cache_file() {
 limits_json_is_usable() {
     local limits_json="$1"
     local now_epoch="$2"
-    local primary_reset secondary_reset
+    local primary_reset secondary_reset limit_fields has_limits
 
     [ -n "$limits_json" ] || return 1
-    [ "$(printf '%s' "$limits_json" | jq -r '.has_limits // false' 2>/dev/null)" = "true" ] || return 1
-
-    primary_reset=$(printf '%s' "$limits_json" | jq -r '.primary_reset // 0' 2>/dev/null)
-    secondary_reset=$(printf '%s' "$limits_json" | jq -r '.secondary_reset // 0' 2>/dev/null)
+    limit_fields=$(printf '%s' "$limits_json" | jq -r '[
+        (.has_limits // false),
+        (.primary_reset // 0),
+        (.secondary_reset // 0)
+    ] | @tsv' 2>/dev/null) || return 1
+    IFS=$'\t' read -r has_limits primary_reset secondary_reset <<EOF
+$limit_fields
+EOF
+    [ "$has_limits" = "true" ] || return 1
 
     if [ "$primary_reset" -gt "$now_epoch" ] 2>/dev/null || [ "$secondary_reset" -gt "$now_epoch" ] 2>/dev/null; then
         return 0
@@ -630,7 +640,7 @@ build_branch_segment() {
     fi
 
     SEG_PLAIN="${label_prefix}${branch_name}"
-    SEG_TEXT="${dim}git${reset} ${branch}${branch_name}${reset}"
+    SEG_TEXT="${dim}git${reset} ${strong}${branch_name}${reset}"
 }
 
 build_git_diff_segment() {
@@ -651,7 +661,7 @@ build_ctx_segment() {
     local pct_color
     pct_color=$(usage_color "$pct_used")
     SEG_PLAIN="ctx ${used_tokens}/${total_tokens} ${pct_used}%"
-    SEG_TEXT="${dim}ctx${reset} ${white}${used_tokens}/${total_tokens}${reset} ${pct_color}${pct_used}%${reset}"
+    SEG_TEXT="${dim}ctx${reset} ${primary}${used_tokens}/${total_tokens}${reset} ${pct_color}${pct_used}%${reset}"
 }
 
 build_hook_segment() {
@@ -685,7 +695,7 @@ build_eff_segment() {
     case "$effort_level" in
         low)
             effort_label="low"
-            effort_text="${branch}low${reset}"
+            effort_text="${strong}low${reset}"
             ;;
         medium)
             effort_label="med"
@@ -704,7 +714,7 @@ build_eff_segment() {
 build_five_hour_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="5h -"
-        SEG_TEXT="${dim}5h${reset} ${dim}-${reset}"
+        SEG_TEXT="${dim}5h${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -715,14 +725,14 @@ build_five_hour_segment() {
     SEG_TEXT="${dim}5h${reset} ${pct_color}${pct_text}${reset}"
     if [ "$show_five_hour_reset" -eq 1 ] && [ -n "$five_hour_reset" ]; then
         SEG_PLAIN+=" ${five_hour_reset}"
-        SEG_TEXT+=" ${dim}${five_hour_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${five_hour_reset}${reset}"
     fi
 }
 
 build_seven_day_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="${weekly_label} -"
-        SEG_TEXT="${dim}${weekly_label}${reset} ${dim}-${reset}"
+        SEG_TEXT="${dim}${weekly_label}${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -733,7 +743,7 @@ build_seven_day_segment() {
     SEG_TEXT="${dim}${weekly_label}${reset} ${pct_color}${pct_text}${reset}"
     if [ "$show_seven_day_reset" -eq 1 ] && [ -n "$seven_day_reset" ]; then
         SEG_PLAIN+=" ${seven_day_reset}"
-        SEG_TEXT+=" ${dim}${seven_day_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${seven_day_reset}${reset}"
     fi
 }
 
@@ -882,13 +892,13 @@ build_bars_git_line() {
         if [ ${#plain_text} -gt "$max_width" ]; then
             plain_text=$(truncate_middle "$plain_text" "$max_width")
         fi
-        text_output="${muted}${repo_name}${reset}${dim}@${reset}${muted}${branch_name}${reset}"
+        text_output="${secondary}${repo_name}${reset}${dim}@${reset}${secondary}${branch_name}${reset}"
     else
         plain_text="$repo_name"
         if [ ${#plain_text} -gt "$max_width" ]; then
             plain_text=$(truncate_middle "$plain_text" "$max_width")
         fi
-        text_output="${muted}${plain_text}${reset}"
+        text_output="${secondary}${plain_text}${reset}"
     fi
 
     LINE_PLAIN="$plain_text"
@@ -956,17 +966,17 @@ build_usage_bar_line() {
     empty_plain=$(repeat_char "$empty_width" "$bar_empty_char")
 
     if [ "$pct_text" = "--" ]; then
-        pct_color="$branch"
-        time_color="$branch"
-        filled_text="${muted}${filled_plain}${reset}"
+        pct_color="$secondary"
+        time_color="$secondary"
+        filled_text="${secondary}${filled_plain}${reset}"
     else
         pct_color=$(remaining_color "$pct_value")
-        time_color="$muted"
+        time_color="$secondary"
         filled_text="${pct_color}${filled_plain}${reset}"
     fi
 
     LINE_PLAIN="${label} ${pct_text} [${filled_plain}${empty_plain}]"
-    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${muted}${empty_plain}${reset}${dim}]${reset}"
+    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${secondary}${empty_plain}${reset}${dim}]${reset}"
 
     if [ -n "$time_text" ]; then
         LINE_PLAIN+=" ${time_text}"
@@ -977,7 +987,7 @@ build_usage_bar_line() {
 build_usage_unavailable_line() {
     local label="$1"
     LINE_PLAIN="${label} unavailable"
-    LINE_TEXT="${dim}${label}${reset} ${muted}unavailable${reset}"
+    LINE_TEXT="${dim}${label}${reset} ${secondary}unavailable${reset}"
 }
 
 build_bars_line() {
@@ -1084,25 +1094,39 @@ total_tokens="0"
 
 session_json=$(parse_session_data 2>/dev/null) || session_json=""
 if [ -n "$session_json" ]; then
-    session_event_ts=$(printf '%s' "$session_json" | jq -r '.event_ts // empty')
+    session_fields=$(printf '%s' "$session_json" | jq -r '[
+        (.event_ts // ""),
+        (.total // 0),
+        (.window // 0),
+        (.has_limits // false),
+        (.primary_pct // 0),
+        (.primary_reset // 0),
+        (.secondary_pct // 0),
+        (.secondary_reset // 0)
+    ] | @tsv' 2>/dev/null)
+    IFS=$'\t' read -r session_event_ts ctx_total ctx_window has_limits five_hour_utilization five_hour_reset_epoch seven_day_utilization seven_day_reset_epoch <<EOF
+$session_fields
+EOF
+    [ -n "$ctx_total" ] || ctx_total=0
+    [ -n "$ctx_window" ] || ctx_window=0
+    [ -n "$has_limits" ] || has_limits="false"
+    [ -n "$five_hour_utilization" ] || five_hour_utilization=0
+    [ -n "$five_hour_reset_epoch" ] || five_hour_reset_epoch=0
+    [ -n "$seven_day_utilization" ] || seven_day_utilization=0
+    [ -n "$seven_day_reset_epoch" ] || seven_day_reset_epoch=0
     session_event_epoch=$(iso_to_epoch "$session_event_ts" 2>/dev/null) || session_event_epoch=""
-    ctx_total=$(printf '%s' "$session_json" | jq -r '.total // 0')
-    ctx_window=$(printf '%s' "$session_json" | jq -r '.window // 0')
     if [ "$ctx_window" -gt 0 ] 2>/dev/null; then
         pct_used=$(( ctx_total * 100 / ctx_window ))
     fi
     used_tokens=$(format_tokens "$ctx_total")
     total_tokens=$(format_tokens "$ctx_window")
 
-    has_limits=$(printf '%s' "$session_json" | jq -r '.has_limits')
     if [ "$has_limits" = "true" ]; then
         usage_available=1
-        five_hour_pct=$(printf '%s' "$session_json" | jq -r '.primary_pct // 0' | awk '{printf "%.0f", $1}')
+        five_hour_pct=$(LC_NUMERIC=C awk -v value="${five_hour_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
         five_hour_remaining_pct=$(remaining_percent "$five_hour_pct")
-        five_hour_reset_epoch=$(printf '%s' "$session_json" | jq -r '.primary_reset // 0')
-        seven_day_pct=$(printf '%s' "$session_json" | jq -r '.secondary_pct // 0' | awk '{printf "%.0f", $1}')
+        seven_day_pct=$(LC_NUMERIC=C awk -v value="${seven_day_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
         seven_day_remaining_pct=$(remaining_percent "$seven_day_pct")
-        seven_day_reset_epoch=$(printf '%s' "$session_json" | jq -r '.secondary_reset // 0')
 
         now=$(resolve_now_epoch)
         if [ "$five_hour_reset_epoch" -gt "$now" ] 2>/dev/null; then

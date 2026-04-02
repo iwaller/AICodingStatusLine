@@ -19,8 +19,10 @@ HOOK_SIDECAR_SCRIPT = ROOT / "scripts" / "codex_hook_sidecar.sh"
 NOTIFY_BRIDGE_SCRIPT = ROOT / "scripts" / "codex_notify_bridge.sh"
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 DOTS_BAR_RE = r"[\u25cf\u25cb]+"
-DEFAULT_7D_TIME = "03 06 08:00"
-DEFAULT_7D_SHORT_DATE = "03 06"
+DEFAULT_SECONDARY_ANSI = "[38;2;133;149;155m"
+DRACULA_SECONDARY_ANSI = "[38;2;132;145;182m"
+DEFAULT_7D_TIME = "03/06 08:00"
+DEFAULT_7D_SHORT_DATE = "03/06"
 CUSTOM_7D_TIME = "99-03-06 08:00"
 CODEX_2W_TIME = "3/25 0:00 reset"
 CODEX_2W_SHORT_DATE = "3/25"
@@ -577,6 +579,24 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("[38;2;77;166;255m", default_raw)
         self.assertIn("[38;2;120;196;120m", forest_raw)
         self.assertEqual(strip_ansi(default_raw), strip_ansi(forest_raw))
+
+    def test_bars_layout_uses_accessible_secondary_palette(self):
+        default_raw = self._run_shell(
+            budget=120,
+            raw=True,
+            extra_env={"CLAUDE_CODE_STATUSLINE_LAYOUT": "bars"},
+        )
+        dracula_raw = self._run_shell(
+            budget=120,
+            raw=True,
+            extra_env={
+                "CLAUDE_CODE_STATUSLINE_LAYOUT": "bars",
+                "CLAUDE_CODE_STATUSLINE_THEME": "dracula",
+            },
+        )
+
+        self.assertIn(DEFAULT_SECONDARY_ANSI, default_raw)
+        self.assertIn(DRACULA_SECONDARY_ANSI, dracula_raw)
 
     def test_powershell_bars_layout_matches_line_order_when_available(self):
         shell_output = self._run_shell(
@@ -1523,7 +1543,7 @@ class CodexStatusLineTests(unittest.TestCase):
         self.assertIn("\u25cf", lines[2])  # ●
         self.assertIn("\u25cb", lines[2])  # ○
 
-    def test_codex_bars_git_line_uses_muted_palette(self):
+    def test_codex_bars_git_line_uses_accessible_secondary_palette(self):
         raw_output = self._run_codex(
             budget=120,
             raw=True,
@@ -1531,7 +1551,7 @@ class CodexStatusLineTests(unittest.TestCase):
         )
         git_line = raw_output.splitlines()[0]
 
-        self.assertIn("[38;2;115;132;139m", git_line)
+        self.assertIn(DEFAULT_SECONDARY_ANSI, git_line)
         self.assertNotIn("[38;2;77;175;176m", git_line)
         self.assertNotIn("[38;2;196;208;212m", git_line)
 

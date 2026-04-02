@@ -71,7 +71,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;120;196;120m"
         $teal   = "${esc}[38;2;94;170;150m"
         $branch = "${esc}[38;2;214;224;205m"
-        $muted  = "${esc}[38;2;132;144;124m"
+        $muted  = "${esc}[38;2;138;150;130m"
         $red    = "${esc}[38;2;224;108;117m"
         $orange = "${esc}[38;2;214;170;84m"
         $yellow = "${esc}[38;2;198;183;101m"
@@ -82,7 +82,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;189;147;249m"
         $teal   = "${esc}[38;2;139;233;253m"
         $branch = "${esc}[38;2;248;248;242m"
-        $muted  = "${esc}[38;2;98;114;164m"
+        $muted  = "${esc}[38;2;132;145;182m"
         $red    = "${esc}[38;2;255;85;85m"
         $orange = "${esc}[38;2;255;184;108m"
         $yellow = "${esc}[38;2;241;250;140m"
@@ -93,7 +93,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;102;217;239m"
         $teal   = "${esc}[38;2;166;226;46m"
         $branch = "${esc}[38;2;230;219;116m"
-        $muted  = "${esc}[38;2;117;113;94m"
+        $muted  = "${esc}[38;2;153;147;101m"
         $red    = "${esc}[38;2;249;38;114m"
         $orange = "${esc}[38;2;253;151;31m"
         $yellow = "${esc}[38;2;230;219;116m"
@@ -104,7 +104,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;38;139;210m"
         $teal   = "${esc}[38;2;42;161;152m"
         $branch = "${esc}[38;2;147;161;161m"
-        $muted  = "${esc}[38;2;88;110;117m"
+        $muted  = "${esc}[38;2;133;149;150m"
         $red    = "${esc}[38;2;220;50;47m"
         $orange = "${esc}[38;2;203;75;22m"
         $yellow = "${esc}[38;2;181;137;0m"
@@ -115,7 +115,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;0;188;212m"
         $teal   = "${esc}[38;2;0;151;167m"
         $branch = "${esc}[38;2;178;235;242m"
-        $muted  = "${esc}[38;2;120;144;156m"
+        $muted  = "${esc}[38;2;124;150;162m"
         $red    = "${esc}[38;2;239;83;80m"
         $orange = "${esc}[38;2;255;152;0m"
         $yellow = "${esc}[38;2;255;213;79m"
@@ -126,7 +126,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;255;138;101m"
         $teal   = "${esc}[38;2;255;183;77m"
         $branch = "${esc}[38;2;255;204;128m"
-        $muted  = "${esc}[38;2;161;136;127m"
+        $muted  = "${esc}[38;2;167;140;127m"
         $red    = "${esc}[38;2;239;83;80m"
         $orange = "${esc}[38;2;255;112;66m"
         $yellow = "${esc}[38;2;255;213;79m"
@@ -159,7 +159,7 @@ switch ($themeName) {
         $accent = "${esc}[38;2;77;166;255m"
         $teal   = "${esc}[38;2;77;175;176m"
         $branch = "${esc}[38;2;196;208;212m"
-        $muted  = "${esc}[38;2;115;132;139m"
+        $muted  = "${esc}[38;2;133;149;155m"
         $red    = "${esc}[38;2;255;85;85m"
         $orange = "${esc}[38;2;255;176;85m"
         $yellow = "${esc}[38;2;230;200;0m"
@@ -169,8 +169,11 @@ switch ($themeName) {
 }
 $dim    = "${esc}[2m"
 $reset  = "${esc}[0m"
-$defaultSevenDayTimeFormat = "%m %d %H:%M"
-$shortSevenDayDateFormat = "%m %d"
+$primary = $white
+$secondary = $muted
+$strong = $branch
+$defaultSevenDayTimeFormat = "%m/%d %H:%M"
+$shortSevenDayDateFormat = "%m/%d"
 
 $sepPlain = " | "
 $sepText = " ${dim}|${reset} "
@@ -391,7 +394,7 @@ function Build-GitSegment {
 function Build-CtxSegment {
     $pctColor = Get-UsageColor $script:pctUsed
     $plain = "ctx $($script:usedTokens)/$($script:totalTokens) $($script:pctUsed)%"
-    $text = "${dim}ctx${reset} ${white}$($script:usedTokens)/$($script:totalTokens)${reset} ${pctColor}$($script:pctUsed)%${reset}"
+    $text = "${dim}ctx${reset} ${primary}$($script:usedTokens)/$($script:totalTokens)${reset} ${pctColor}$($script:pctUsed)%${reset}"
     return New-Segment $text $plain
 }
 
@@ -399,7 +402,7 @@ function Build-EffSegment {
     switch ($script:effortLevel) {
         "low" {
             $plain = "eff low"
-            $valueText = "${branch}low${reset}"
+            $valueText = "${strong}low${reset}"
         }
         "medium" {
             $plain = "eff med"
@@ -415,7 +418,7 @@ function Build-EffSegment {
 
 function Build-FiveHourSegment {
     if (-not $script:usageAvailable) {
-        return New-Segment "${dim}5h${reset} ${dim}-${reset}" "5h -"
+        return New-Segment "${dim}5h${reset} ${secondary}-${reset}" "5h -"
     }
 
     $pctColor = Get-UsageColor $script:fiveHourPct
@@ -425,14 +428,14 @@ function Build-FiveHourSegment {
     $text = "${dim}5h${reset} ${pctColor}${dispPct}%${suffix}${reset}"
     if ($script:showFiveHourReset -and $script:fiveHourReset) {
         $plain += " $($script:fiveHourReset)"
-        $text += " ${dim}$($script:fiveHourReset)${reset}"
+        $text += " ${secondary}$($script:fiveHourReset)${reset}"
     }
     return New-Segment $text $plain
 }
 
 function Build-SevenDaySegment {
     if (-not $script:usageAvailable) {
-        return New-Segment "${dim}7d${reset} ${dim}-${reset}" "7d -"
+        return New-Segment "${dim}7d${reset} ${secondary}-${reset}" "7d -"
     }
 
     $pctColor = Get-UsageColor $script:sevenDayPct
@@ -442,7 +445,7 @@ function Build-SevenDaySegment {
     $text = "${dim}7d${reset} ${pctColor}${dispPct}%${suffix}${reset}"
     if ($script:showSevenDayReset -and $script:sevenDayReset) {
         $plain += " $($script:sevenDayReset)"
-        $text += " ${dim}$($script:sevenDayReset)${reset}"
+        $text += " ${secondary}$($script:sevenDayReset)${reset}"
     }
     return New-Segment $text $plain
 }
@@ -452,11 +455,11 @@ function Build-ExtraSegment {
 
     if ($script:extraUsed -and $script:extraLimit) {
         $plain = "extra `$$($script:extraUsed)/`$$($script:extraLimit)"
-        $text = "${dim}extra${reset} ${white}`$$($script:extraUsed)/`$$($script:extraLimit)${reset}"
+        $text = "${dim}extra${reset} ${primary}`$$($script:extraUsed)/`$$($script:extraLimit)${reset}"
         return New-Segment $text $plain
     }
 
-    return New-Segment "${dim}extra${reset} ${branch}enabled${reset}" "extra enabled"
+    return New-Segment "${dim}extra${reset} ${strong}enabled${reset}" "extra enabled"
 }
 
 function Compose-Output {
@@ -546,17 +549,17 @@ function Build-UsageBarLine([string]$label, [int]$pctValue, [string]$pctText, [s
     $emptyPlain = Repeat-Char $barEmptyChar $emptyWidth
 
     if ($pctText -eq "--") {
-        $pctColor = $branch
-        $timeColor = $branch
-        $filledText = "${muted}${filledPlain}${reset}"
+        $pctColor = $secondary
+        $timeColor = $secondary
+        $filledText = "${secondary}${filledPlain}${reset}"
     } else {
         $pctColor = Get-UsageColor $pctValue
-        $timeColor = $muted
+        $timeColor = $secondary
         $filledText = "${pctColor}${filledPlain}${reset}"
     }
 
     $plain = "$label $pctText [$filledPlain$emptyPlain]"
-    $text = "${dim}${label}${reset} ${pctColor}${pctText}${reset} ${dim}[${reset}${filledText}${muted}${emptyPlain}${reset}${dim}]${reset}"
+    $text = "${dim}${label}${reset} ${pctColor}${pctText}${reset} ${dim}[${reset}${filledText}${secondary}${emptyPlain}${reset}${dim}]${reset}"
     if ($timeText) {
         $plain += " $timeText"
         $text += "${timeColor}$timeText${reset}"

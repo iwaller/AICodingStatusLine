@@ -77,7 +77,7 @@ case "$theme_name" in
         accent='\033[38;2;120;196;120m'
         teal='\033[38;2;94;170;150m'
         branch='\033[38;2;214;224;205m'
-        muted='\033[38;2;132;144;124m'
+        muted='\033[38;2;138;150;130m'
         red='\033[38;2;224;108;117m'
         orange='\033[38;2;214;170;84m'
         yellow='\033[38;2;198;183;101m'
@@ -88,7 +88,7 @@ case "$theme_name" in
         accent='\033[38;2;189;147;249m'
         teal='\033[38;2;139;233;253m'
         branch='\033[38;2;248;248;242m'
-        muted='\033[38;2;98;114;164m'
+        muted='\033[38;2;132;145;182m'
         red='\033[38;2;255;85;85m'
         orange='\033[38;2;255;184;108m'
         yellow='\033[38;2;241;250;140m'
@@ -99,7 +99,7 @@ case "$theme_name" in
         accent='\033[38;2;102;217;239m'
         teal='\033[38;2;166;226;46m'
         branch='\033[38;2;230;219;116m'
-        muted='\033[38;2;117;113;94m'
+        muted='\033[38;2;153;147;101m'
         red='\033[38;2;249;38;114m'
         orange='\033[38;2;253;151;31m'
         yellow='\033[38;2;230;219;116m'
@@ -110,7 +110,7 @@ case "$theme_name" in
         accent='\033[38;2;38;139;210m'
         teal='\033[38;2;42;161;152m'
         branch='\033[38;2;147;161;161m'
-        muted='\033[38;2;88;110;117m'
+        muted='\033[38;2;133;149;150m'
         red='\033[38;2;220;50;47m'
         orange='\033[38;2;203;75;22m'
         yellow='\033[38;2;181;137;0m'
@@ -121,7 +121,7 @@ case "$theme_name" in
         accent='\033[38;2;0;188;212m'
         teal='\033[38;2;0;151;167m'
         branch='\033[38;2;178;235;242m'
-        muted='\033[38;2;120;144;156m'
+        muted='\033[38;2;124;150;162m'
         red='\033[38;2;239;83;80m'
         orange='\033[38;2;255;152;0m'
         yellow='\033[38;2;255;213;79m'
@@ -132,7 +132,7 @@ case "$theme_name" in
         accent='\033[38;2;255;138;101m'
         teal='\033[38;2;255;183;77m'
         branch='\033[38;2;255;204;128m'
-        muted='\033[38;2;161;136;127m'
+        muted='\033[38;2;167;140;127m'
         red='\033[38;2;239;83;80m'
         orange='\033[38;2;255;112;66m'
         yellow='\033[38;2;255;213;79m'
@@ -165,7 +165,7 @@ case "$theme_name" in
         accent='\033[38;2;77;166;255m'
         teal='\033[38;2;77;175;176m'
         branch='\033[38;2;196;208;212m'
-        muted='\033[38;2;115;132;139m'
+        muted='\033[38;2;133;149;155m'
         red='\033[38;2;255;85;85m'
         orange='\033[38;2;255;176;85m'
         yellow='\033[38;2;230;200;0m'
@@ -176,10 +176,16 @@ esac
 dim='\033[2m'
 reset='\033[0m'
 
+# Semantic aliases keep the renderers readable even though each theme is
+# still defined by concrete hue values above.
+primary="$white"
+secondary="$muted"
+strong="$branch"
+
 sep_plain=' | '
 sep_text=" ${dim}|${reset} "
-default_seven_day_time_format='%m %d %H:%M'
-short_seven_day_date_format='%m %d'
+default_seven_day_time_format='%m/%d %H:%M'
+short_seven_day_date_format='%m/%d'
 
 SEG_TEXT=""
 SEG_PLAIN=""
@@ -419,7 +425,7 @@ build_ctx_segment() {
     local pct_color
     pct_color=$(usage_color "$pct_used")
     SEG_PLAIN="ctx ${used_tokens}/${total_tokens} ${pct_used}%"
-    SEG_TEXT="${dim}ctx${reset} ${white}${used_tokens}/${total_tokens}${reset} ${pct_color}${pct_used}%${reset}"
+    SEG_TEXT="${dim}ctx${reset} ${primary}${used_tokens}/${total_tokens}${reset} ${pct_color}${pct_used}%${reset}"
 }
 
 build_eff_segment() {
@@ -427,7 +433,7 @@ build_eff_segment() {
     case "$effort_level" in
         low)
             effort_label="low"
-            effort_text="${branch}low${reset}"
+            effort_text="${strong}low${reset}"
             ;;
         medium)
             effort_label="med"
@@ -446,7 +452,7 @@ build_eff_segment() {
 build_five_hour_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="5h -"
-        SEG_TEXT="${dim}5h${reset} ${dim}-${reset}"
+        SEG_TEXT="${dim}5h${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -458,14 +464,14 @@ build_five_hour_segment() {
     SEG_TEXT="${dim}5h${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_five_hour_reset" -eq 1 ] && [ -n "$five_hour_reset" ]; then
         SEG_PLAIN+=" ${five_hour_reset}"
-        SEG_TEXT+=" ${dim}${five_hour_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${five_hour_reset}${reset}"
     fi
 }
 
 build_seven_day_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="7d -"
-        SEG_TEXT="${dim}7d${reset} ${dim}-${reset}"
+        SEG_TEXT="${dim}7d${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -477,7 +483,7 @@ build_seven_day_segment() {
     SEG_TEXT="${dim}7d${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_seven_day_reset" -eq 1 ] && [ -n "$seven_day_reset" ]; then
         SEG_PLAIN+=" ${seven_day_reset}"
-        SEG_TEXT+=" ${dim}${seven_day_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${seven_day_reset}${reset}"
     fi
 }
 
@@ -491,12 +497,12 @@ build_extra_segment() {
 
     if [ -n "$extra_used" ] && [ -n "$extra_limit" ] && [[ "$extra_used" != *'$'* ]] && [[ "$extra_limit" != *'$'* ]]; then
         SEG_PLAIN="extra \$${extra_used}/\$${extra_limit}"
-        SEG_TEXT="${dim}extra${reset} ${white}\$${extra_used}/\$${extra_limit}${reset}"
+        SEG_TEXT="${dim}extra${reset} ${primary}\$${extra_used}/\$${extra_limit}${reset}"
         return
     fi
 
     SEG_PLAIN="extra enabled"
-    SEG_TEXT="${dim}extra${reset} ${branch}enabled${reset}"
+    SEG_TEXT="${dim}extra${reset} ${strong}enabled${reset}"
 }
 
 build_usage_bar_line() {
@@ -553,17 +559,17 @@ build_usage_bar_line() {
     empty_plain=$(repeat_char "$empty_width" "$bar_empty_char")
 
     if [ "$pct_text" = "--" ]; then
-        pct_color="$branch"
-        time_color="$branch"
-        filled_text="${muted}${filled_plain}${reset}"
+        pct_color="$secondary"
+        time_color="$secondary"
+        filled_text="${secondary}${filled_plain}${reset}"
     else
         pct_color=$(usage_color "$pct_value")
-        time_color="$muted"
+        time_color="$secondary"
         filled_text="${pct_color}${filled_plain}${reset}"
     fi
 
     LINE_PLAIN="${label} ${pct_text} [${filled_plain}${empty_plain}]"
-    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${muted}${empty_plain}${reset}${dim}]${reset}"
+    LINE_TEXT="${dim}${label}${reset} ${pct_color}${pct_text}${reset} ${dim}[${reset}${filled_text}${secondary}${empty_plain}${reset}${dim}]${reset}"
 
     if [ -n "$time_text" ]; then
         LINE_PLAIN+=" ${time_text}"
@@ -758,14 +764,25 @@ format_reset_time() {
 
 seven_day_time_format=$(resolve_seven_day_time_format "${CLAUDE_CODE_STATUSLINE_SEVEN_DAY_TIME_FORMAT:-}")
 
-model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"')
+input_fields=$(printf '%s' "$input" | jq -r '[
+    (.model.display_name // "Claude"),
+    (.context_window.context_window_size // 200000),
+    (.context_window.current_usage.input_tokens // 0),
+    (.context_window.current_usage.cache_creation_input_tokens // 0),
+    (.context_window.current_usage.cache_read_input_tokens // 0),
+    (.cwd // "")
+] | @tsv' 2>/dev/null)
+IFS=$'\t' read -r model_name size input_tokens cache_create cache_read cwd <<EOF
+$input_fields
+EOF
+[ -n "$model_name" ] || model_name="Claude"
+[ -n "$size" ] || size=200000
+[ -n "$input_tokens" ] || input_tokens=0
+[ -n "$cache_create" ] || cache_create=0
+[ -n "$cache_read" ] || cache_read=0
 
-size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
 [ "$size" -eq 0 ] 2>/dev/null && size=200000
 
-input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
-cache_create=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
-cache_read=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
 current=$(( input_tokens + cache_create + cache_read ))
 
 used_tokens=$(format_tokens "$current")
@@ -786,7 +803,6 @@ elif [ -f "$settings_path" ]; then
     [ -n "$effort_val" ] && effort_level="$effort_val"
 fi
 
-cwd=$(echo "$input" | jq -r '.cwd // empty')
 display_dir=""
 git_branch=""
 git_stat=""
@@ -829,9 +845,9 @@ if $needs_refresh; then
             -H "anthropic-beta: oauth-2025-04-20" \
             -H "User-Agent: claude-code/2.1.34" \
             "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-        if [ -n "$response" ] && echo "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
+        if [ -n "$response" ] && printf '%s' "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
             usage_data="$response"
-            echo "$response" > "$cache_file"
+            printf '%s' "$response" > "$cache_file"
         fi
     fi
 fi
@@ -853,27 +869,42 @@ extra_enabled="false"
 extra_used=""
 extra_limit=""
 
-if [ -n "$usage_data" ] && echo "$usage_data" | jq -e '.five_hour' >/dev/null 2>&1; then
+if [ -n "$usage_data" ] && printf '%s' "$usage_data" | jq -e '.five_hour' >/dev/null 2>&1; then
     usage_available=1
-    five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
-    five_hour_reset_iso=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
+    usage_fields=$(printf '%s' "$usage_data" | jq -r '[
+        (.five_hour.utilization // 0),
+        (.five_hour.resets_at // ""),
+        (.seven_day.utilization // 0),
+        (.seven_day.resets_at // ""),
+        (.extra_usage.is_enabled // false),
+        (.extra_usage.used_credits // 0),
+        (.extra_usage.monthly_limit // 0)
+    ] | @tsv' 2>/dev/null)
+    IFS=$'\t' read -r five_hour_utilization five_hour_reset_iso seven_day_utilization seven_day_reset_iso extra_enabled extra_used_cents extra_limit_cents <<EOF
+$usage_fields
+EOF
+    [ -n "$five_hour_utilization" ] || five_hour_utilization=0
+    [ -n "$seven_day_utilization" ] || seven_day_utilization=0
+    [ -n "$extra_enabled" ] || extra_enabled="false"
+    [ -n "$extra_used_cents" ] || extra_used_cents=0
+    [ -n "$extra_limit_cents" ] || extra_limit_cents=0
+
+    five_hour_pct=$(LC_NUMERIC=C awk -v value="${five_hour_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
     if is_future_epoch "$five_hour_reset_iso"; then
         five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "%H:%M" "1")
         [ -n "$five_hour_reset" ] && show_five_hour_reset=1
     fi
 
-    seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
-    seven_day_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
+    seven_day_pct=$(LC_NUMERIC=C awk -v value="${seven_day_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
     if is_future_epoch "$seven_day_reset_iso"; then
         seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "$seven_day_time_format" "0")
         seven_day_date=$(format_reset_time "$seven_day_reset_iso" "$short_seven_day_date_format" "0")
         [ -n "$seven_day_reset" ] && show_seven_day_reset=1
     fi
 
-    extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
     if [ "$extra_enabled" = "true" ]; then
-        extra_used=$(echo "$usage_data" | jq -r '.extra_usage.used_credits // 0' | LC_NUMERIC=C awk '{printf "%.2f", $1/100}')
-        extra_limit=$(echo "$usage_data" | jq -r '.extra_usage.monthly_limit // 0' | LC_NUMERIC=C awk '{printf "%.2f", $1/100}')
+        extra_used=$(LC_NUMERIC=C awk -v value="${extra_used_cents:-0}" 'BEGIN {printf "%.2f", value / 100}')
+        extra_limit=$(LC_NUMERIC=C awk -v value="${extra_limit_cents:-0}" 'BEGIN {printf "%.2f", value / 100}')
         show_extra=1
     fi
 fi

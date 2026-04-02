@@ -223,12 +223,14 @@ CODEX_MODEL_NAME=o3 CODEX_STATUSLINE_THEME=dracula codex-tmux
 |------|------|------|
 | **Model** | 当前模型名称 | `gpt-5.4` |
 | **CWD@Branch** | 当前目录名 + Git 分支，仓库有改动时追加 `(+N -N)` | `myapp@main (+3 -1)` |
-| **ctx** | 已用 / 总计 Context Window Token 数 + 百分比 | `ctx 89k/258k 34%` |
-| **eff** | 推理努力等级 | `low` / `med` / `high` |
+| **ctx** | 当前已用 / 总计 context window + 百分比 | `ctx 89k/258k 34%` |
+| **eff** | 当前推理努力等级 | `low` / `med` / `high` |
 | **5h** | 5 小时速率限制剩余百分比 + 重置时间 | `5h 86% left 13:30` |
-| **weekly** | 长周期速率限制剩余百分比 + 绝对重置时间 | `weekly 96% left 3/25 0:00 reset` |
+| **weekly** | 长周期额度（secondary rate limit）的剩余百分比 + 绝对重置时间 | `weekly 96% left 3/25 0:00 reset` |
 
 剩余额度按阈值变色：🟢 >50% → 🟡 ≤50% → 🟠 ≤30% → 🔴 ≤10%
+
+状态栏里的标签会刻意保持简短：`ctx` = context window，`eff` = reasoning effort；`weekly` 表示长周期额度摘要。
 
 ---
 
@@ -398,14 +400,14 @@ CODEX_STATUSLINE_LAYOUT=bars ./codex_statusline.sh .
 ## 常见问题
 
 <details>
-<summary><strong>状态栏显示 <code>5h -</code> / <code>weekly -</code>，或 bars 布局显示 <code>unavailable</code>？</strong></summary>
+<summary><strong>只显示 <code>5h -</code> / <code>weekly -</code>，或 bars 布局显示 <code>unavailable</code>，是什么意思？</strong></summary>
 
-说明当前拿不到可用的 rate-limit 数据。常见原因有两种：
+这表示当前没有拿到可用的额度数据，不是“额度为 0”。常见原因有两种：
 
 - 找不到有效的 session JSONL 文件，或文件中没有 `token_count` 事件。
 - session 中虽然有 `token_count`，但 `payload.rate_limits` 为 `null`。这在较新的 Codex CLI 中可能出现。
 
-确认 Codex CLI 已运行过至少一次对话，并检查 `~/.codex/sessions/` 目录下最新 `.jsonl` 是否包含 `token_count`。如果 `rate_limits` 缺失，状态栏会保留 `ctx` 等本地可得信息，并把 `5h` / `weekly` 明确标记为 `unavailable`。
+先确认 Codex CLI 已运行过至少一次对话，再检查 `~/.codex/sessions/` 目录下最新 `.jsonl` 是否包含 `token_count`。如果 `rate_limits` 缺失，状态栏会保留 `ctx` 等本地可得信息，并把 `5h` / `weekly` 明确标记为 `unavailable`。
 </details>
 
 <details>
