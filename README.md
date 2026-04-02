@@ -466,6 +466,6 @@ MIT
 
 ## 致谢
 
-本项目 fork 自 [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)（原作者 Daniel Oliveira），在保留原始状态栏概念和跨平台脚本的基础上扩展了主题系统、多布局、进度条样式、Codex CLI 支持和 `/statusline` Skill。
+本项目 fork 自 [kaelinda/AICodingStatusLine](https://github.com/kaelinda/AICodingStatusLine)，在其基础上进一步定制开发。kaelinda 的版本 fork 自 [daniel3303/ClaudeCodeStatusLine](https://github.com/daniel3303/ClaudeCodeStatusLine)（原作者 Daniel Oliveira），在保留原始状态栏概念和跨平台脚本的基础上扩展了主题系统、多布局、进度条样式、Codex CLI 支持和 `/statusline` Skill。
 
 **Fork 维护：** [iwaller/AICodingStatusLine](https://github.com/iwaller/AICodingStatusLine)
