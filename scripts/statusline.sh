@@ -886,12 +886,12 @@ if [ -n "$usage_data" ] && printf '%s' "$usage_data" | jq -e '.five_hour' >/dev/
         (.extra_usage.is_enabled // false),
         (.extra_usage.used_credits // 0),
         (.extra_usage.monthly_limit // 0)
-    ] | @tsv' 2>/dev/null)
-    IFS=$'\t' read -r five_hour_utilization five_hour_reset_iso seven_day_utilization seven_day_reset_iso extra_enabled extra_used_cents extra_limit_cents <<EOF
+    ] | map(tostring) | join("\u001f")' 2>/dev/null)
+    IFS=$'\x1f' read -r five_hour_utilization five_hour_reset_iso seven_day_utilization seven_day_reset_iso extra_enabled extra_used_cents extra_limit_cents <<EOF
 $usage_fields
 EOF
-    [ -n "$five_hour_utilization" ] || five_hour_utilization=0
-    [ -n "$seven_day_utilization" ] || seven_day_utilization=0
+    echo "$five_hour_utilization" | grep -qE '^[0-9]+(\.[0-9]+)?$' || five_hour_utilization=0
+    echo "$seven_day_utilization" | grep -qE '^[0-9]+(\.[0-9]+)?$' || seven_day_utilization=0
     [ -n "$extra_enabled" ] || extra_enabled="false"
     [ -n "$extra_used_cents" ] || extra_used_cents=0
     [ -n "$extra_limit_cents" ] || extra_limit_cents=0
