@@ -497,8 +497,8 @@ class StatusLineTests(unittest.TestCase):
         self.assertIn("eff low", lines[0])
         self.assertNotIn("5h ", lines[0])
         self.assertNotIn("7d ", lines[0])
-        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\] 2:00$")
-        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\] {re.escape(DEFAULT_7D_TIME)}$")
+        self.assertRegex(lines[1], r"^5h [=\-]+\s+83% 2:00$")
+        self.assertRegex(lines[2], rf"^7d [=\-]+\s+63% {re.escape(DEFAULT_7D_TIME)}$")
 
     def test_bars_layout_narrow_width_keeps_bar_and_drops_time_first(self):
         output = self._run_shell(
@@ -508,12 +508,10 @@ class StatusLineTests(unittest.TestCase):
         lines = output.splitlines()
 
         self.assertEqual(3, len(lines))
-        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
+        self.assertRegex(lines[1], r"^5h [=\-]+\s+83%$")
         self.assertRegex(
-            lines[2], rf"^7d 63% \[[=\-]+\]( {re.escape(DEFAULT_7D_SHORT_DATE)})?$"
+            lines[2], rf"^7d [=\-]+\s+63%( {re.escape(DEFAULT_7D_SHORT_DATE)})?$"
         )
-        self.assertIn("[", lines[1])
-        self.assertIn("[", lines[2])
 
     def test_custom_seven_day_time_format_applies_in_compact_layout(self):
         output = self._run_shell(
@@ -543,7 +541,7 @@ class StatusLineTests(unittest.TestCase):
         )
         lines = output.splitlines()
 
-        self.assertRegex(lines[2], rf"^7d 63% \[[=\-]+\] {re.escape(CUSTOM_7D_TIME)}$")
+        self.assertRegex(lines[2], rf"^7d [=\-]+\s+63% {re.escape(CUSTOM_7D_TIME)}$")
 
     def test_bars_layout_narrow_width_uses_short_default_date_for_seven_day(self):
         output = self._run_shell(
@@ -556,7 +554,7 @@ class StatusLineTests(unittest.TestCase):
         lines = output.splitlines()
 
         self.assertRegex(
-            lines[2], rf"^7d 63% \[[=\-]+\]( {re.escape(DEFAULT_7D_SHORT_DATE)})?$"
+            lines[2], rf"^7d [=\-]+\s+63%( {re.escape(DEFAULT_7D_SHORT_DATE)})?$"
         )
 
     def test_bars_layout_without_usage_keeps_placeholders(self):
@@ -568,8 +566,8 @@ class StatusLineTests(unittest.TestCase):
         lines = output.splitlines()
 
         self.assertEqual(3, len(lines))
-        self.assertEqual("5h -- [----------] n/a", lines[1])
-        self.assertEqual("7d -- [----------] n/a", lines[2])
+        self.assertEqual("5h ----------   -- n/a", lines[1])
+        self.assertEqual("7d ----------   -- n/a", lines[2])
 
     def test_bars_layout_dots_style_changes_bar_glyphs(self):
         output = self._run_shell(
@@ -582,9 +580,9 @@ class StatusLineTests(unittest.TestCase):
         lines = output.splitlines()
 
         self.assertEqual(3, len(lines))
-        self.assertRegex(lines[1], rf"^5h 83% \[{DOTS_BAR_RE}\] 2:00$")
+        self.assertRegex(lines[1], rf"^5h {DOTS_BAR_RE}\s+83% 2:00$")
         self.assertRegex(
-            lines[2], rf"^7d 63% \[{DOTS_BAR_RE}\] {re.escape(DEFAULT_7D_TIME)}$"
+            lines[2], rf"^7d {DOTS_BAR_RE}\s+63% {re.escape(DEFAULT_7D_TIME)}$"
         )
         self.assertIn("●", lines[1])
         self.assertIn("○", lines[1])
@@ -635,8 +633,8 @@ class StatusLineTests(unittest.TestCase):
         lines = output.splitlines()
 
         self.assertEqual(3, len(lines))
-        self.assertEqual("5h -- [□□□□□□□□□□] n/a", lines[1])
-        self.assertEqual("7d -- [□□□□□□□□□□] n/a", lines[2])
+        self.assertEqual("5h □□□□□□□□□□   -- n/a", lines[1])
+        self.assertEqual("7d □□□□□□□□□□   -- n/a", lines[2])
 
     def test_unknown_bar_style_falls_back_to_ascii(self):
         default_output = self._run_shell(
@@ -856,8 +854,8 @@ class StatusLineTests(unittest.TestCase):
         )
         lines = output.splitlines()
         self.assertEqual(3, len(lines))
-        self.assertRegex(lines[1], r"^5h 83% \[[=\-]+\]$")
-        self.assertRegex(lines[2], r"^7d 63% \[[=\-]+\]$")
+        self.assertRegex(lines[1], r"^5h [=\-]+\s+83%$")
+        self.assertRegex(lines[2], r"^7d [=\-]+\s+63%$")
 
     def test_install_script_codex_target_installs_tmux_assets(self):
         install_home, _ = self._run_install("--target", "codex")

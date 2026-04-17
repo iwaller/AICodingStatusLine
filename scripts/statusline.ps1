@@ -541,7 +541,7 @@ function Build-UsageBarLine([string]$label, [int]$pctValue, [string]$pctText, [s
     if ($barWidth -lt $minBarWidth) { $barWidth = $minBarWidth }
 
     $barPct = if ($script:pctMode -eq "left") { 100 - $pctValue } else { $pctValue }
-    $filledWidth = if ($barPct -gt 0) { [math]::Floor($barPct * $barWidth / 100) } else { 0 }
+    $filledWidth = if ($barPct -gt 0) { [math]::Max(1, [math]::Floor($barPct * $barWidth / 100)) } else { 0 }
     if ($filledWidth -gt $barWidth) { $filledWidth = $barWidth }
     $emptyWidth = $barWidth - $filledWidth
 

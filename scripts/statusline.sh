@@ -198,12 +198,39 @@ LINE_TEXT=""
 LINE_PLAIN=""
 include_usage_summary=1
 
+round_to_int() {
+    local __dst="$1"
+    local __val="${2:-0}"
+    if [[ ! "$__val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        printf -v "$__dst" "%d" 0
+        return
+    fi
+    local __int="${__val%%.*}"
+    if [[ "$__val" == *.* ]]; then
+        local __frac="${__val#*.}"
+        if [ "${__frac:0:1}" -ge 5 ]; then
+            printf -v "$__dst" "%d" $(( __int + 1 ))
+            return
+        fi
+    fi
+    printf -v "$__dst" "%d" "${__int:-0}"
+}
+
 format_tokens() {
     local num=$1
     if [ "$num" -ge 1000000 ]; then
-        awk "BEGIN {printf \"%.1fm\", $num / 1000000}"
+        local whole=$(( num / 1000000 ))
+        local frac=$(( (num % 1000000) / 100000 ))
+        if [ $(( (num % 100000) / 10000 )) -ge 5 ]; then
+            frac=$(( frac + 1 ))
+            if [ "$frac" -ge 10 ]; then
+                whole=$(( whole + 1 ))
+                frac=0
+            fi
+        fi
+        printf "%d.%dm" "$whole" "$frac"
     elif [ "$num" -ge 1000 ]; then
-        awk "BEGIN {printf \"%.0fk\", $num / 1000}"
+        printf "%dk" $(( (num + 500) / 1000 ))
     else
         printf "%d" "$num"
     fi
@@ -308,14 +335,10 @@ add_segment() {
 repeat_char() {
     local count="$1"
     local char="$2"
-    local result=""
-
     [ "$count" -le 0 ] && return
-    while [ "$count" -gt 0 ]; do
-        result="${result}${char}"
-        count=$(( count - 1 ))
-    done
-    printf "%s" "$result"
+    local filler
+    printf -v filler "%*s" "$count" ""
+    printf "%s" "${filler// /$char}"
 }
 
 compose_segments() {
@@ -555,6 +578,7 @@ build_usage_bar_line() {
     local filled_width=0
     if [ "$bar_pct" -gt 0 ]; then
         filled_width=$(( bar_pct * bar_width / 100 ))
+        [ "$filled_width" -lt 1 ] && filled_width=1
     fi
     if [ "$filled_width" -gt "$bar_width" ]; then
         filled_width="$bar_width"
@@ -676,7 +700,7 @@ get_oauth_token() {
         local blob
         blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
         if [ -n "$blob" ]; then
-            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+            token=$(jq -r '.claudeAiOauth.accessToken // empty' <<< "$blob" 2>/dev/null)
             if [ -n "$token" ] && [ "$token" != "null" ]; then
                 printf "%s" "$token"
                 return 0
@@ -697,7 +721,7 @@ get_oauth_token() {
         local blob
         blob=$(timeout 2 secret-tool lookup service "Claude Code-credentials" 2>/dev/null)
         if [ -n "$blob" ]; then
-            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+            token=$(jq -r '.claudeAiOauth.accessToken // empty' <<< "$blob" 2>/dev/null)
             if [ -n "$token" ] && [ "$token" != "null" ]; then
                 printf "%s" "$token"
                 return 0
@@ -763,7 +787,12 @@ format_reset_time() {
     formatted=$(date -j -r "$epoch" +"$format_string" 2>/dev/null)
 
     if [ -n "$formatted" ] && [ "$trim_hour" = "1" ]; then
-        formatted=$(printf "%s" "$formatted" | sed -E 's/(^| )0([0-9]:)/\1\2/g')
+        if [[ "$formatted" =~ ^0([0-9]:.*) ]]; then
+            formatted="${BASH_REMATCH[1]}"
+        fi
+        while [[ "$formatted" =~ ^(.*\ )0([0-9]:.*)$ ]]; do
+            formatted="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        done
     fi
 
     [ -n "$formatted" ] && printf "%s" "$formatted"
@@ -813,7 +842,7 @@ fi
 display_dir=""
 git_branch=""
 git_stat=""
-if [ -n "$cwd" ]; then
+if [ -n "$cwd" ] && segment_enabled "git"; then
     display_dir="${cwd##*/}"
     git_branch=$(git -C "${cwd}" rev-parse --abbrev-ref HEAD 2>/dev/null)
     git_stat=$(
@@ -824,37 +853,44 @@ if [ -n "$cwd" ]; then
     )
 fi
 
-cache_file="/tmp/claude/statusline-usage-cache.json"
-cache_max_age=60
-mkdir -p /tmp/claude
-
-needs_refresh=true
 usage_data=""
-
-if [ -f "$cache_file" ]; then
-    cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
-    now=$(date +%s)
-    cache_age=$(( now - cache_mtime ))
-    if [ "$cache_age" -lt "$cache_max_age" ]; then
-        needs_refresh=false
-    fi
-    usage_data=$(cat "$cache_file" 2>/dev/null)
+need_usage=0
+if segment_enabled "5h" || segment_enabled "7d" || segment_enabled "extra"; then
+    need_usage=1
 fi
 
-if $needs_refresh; then
-    touch "$cache_file" 2>/dev/null
-    token=$(get_oauth_token)
-    if [ -n "$token" ] && [ "$token" != "null" ]; then
-        response=$(curl -s --max-time 10 \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $token" \
-            -H "anthropic-beta: oauth-2025-04-20" \
-            -H "User-Agent: claude-code/2.1.34" \
-            "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-        if [ -n "$response" ] && printf '%s' "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
-            usage_data="$response"
-            printf '%s' "$response" > "$cache_file"
+if [ "$need_usage" -eq 1 ]; then
+    cache_file="/tmp/claude/statusline-usage-cache.json"
+    cache_max_age=60
+    mkdir -p /tmp/claude
+
+    needs_refresh=true
+
+    if [ -f "$cache_file" ]; then
+        cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
+        now=$(date +%s)
+        cache_age=$(( now - cache_mtime ))
+        if [ "$cache_age" -lt "$cache_max_age" ]; then
+            needs_refresh=false
+        fi
+        usage_data=$(cat "$cache_file" 2>/dev/null)
+    fi
+
+    if $needs_refresh; then
+        touch "$cache_file" 2>/dev/null
+        token=$(get_oauth_token)
+        if [ -n "$token" ] && [ "$token" != "null" ]; then
+            response=$(curl -s --max-time 10 \
+                -H "Accept: application/json" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $token" \
+                -H "anthropic-beta: oauth-2025-04-20" \
+                -H "User-Agent: claude-code/2.1.34" \
+                "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
+            if [ -n "$response" ] && [[ "$response" == *'"five_hour"'* ]]; then
+                usage_data="$response"
+                printf '%s' "$response" > "$cache_file"
+            fi
         fi
     fi
 fi
@@ -876,33 +912,39 @@ extra_enabled="false"
 extra_used=""
 extra_limit=""
 
-if [ -n "$usage_data" ] && printf '%s' "$usage_data" | jq -e '.five_hour' >/dev/null 2>&1; then
+usage_fields=""
+if [ -n "$usage_data" ] && [[ "$usage_data" == *'"five_hour"'* ]]; then
+    usage_fields=$(jq -r '
+        if (.five_hour // null) != null then
+            [(.five_hour.utilization // 0),
+             (.five_hour.resets_at // ""),
+             (.seven_day.utilization // 0),
+             (.seven_day.resets_at // ""),
+             (.extra_usage.is_enabled // false),
+             (.extra_usage.used_credits // 0),
+             (.extra_usage.monthly_limit // 0)]
+            | map(tostring) | join("\u001f")
+        else empty end' <<< "$usage_data" 2>/dev/null)
+fi
+
+if [ -n "$usage_fields" ]; then
     usage_available=1
-    usage_fields=$(printf '%s' "$usage_data" | jq -r '[
-        (.five_hour.utilization // 0),
-        (.five_hour.resets_at // ""),
-        (.seven_day.utilization // 0),
-        (.seven_day.resets_at // ""),
-        (.extra_usage.is_enabled // false),
-        (.extra_usage.used_credits // 0),
-        (.extra_usage.monthly_limit // 0)
-    ] | map(tostring) | join("\u001f")' 2>/dev/null)
     IFS=$'\x1f' read -r five_hour_utilization five_hour_reset_iso seven_day_utilization seven_day_reset_iso extra_enabled extra_used_cents extra_limit_cents <<EOF
 $usage_fields
 EOF
-    echo "$five_hour_utilization" | grep -qE '^[0-9]+(\.[0-9]+)?$' || five_hour_utilization=0
-    echo "$seven_day_utilization" | grep -qE '^[0-9]+(\.[0-9]+)?$' || seven_day_utilization=0
+    [[ "$five_hour_utilization" =~ ^[0-9]+(\.[0-9]+)?$ ]] || five_hour_utilization=0
+    [[ "$seven_day_utilization" =~ ^[0-9]+(\.[0-9]+)?$ ]] || seven_day_utilization=0
     [ -n "$extra_enabled" ] || extra_enabled="false"
     [ -n "$extra_used_cents" ] || extra_used_cents=0
     [ -n "$extra_limit_cents" ] || extra_limit_cents=0
 
-    five_hour_pct=$(LC_NUMERIC=C awk -v value="${five_hour_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
+    round_to_int five_hour_pct "$five_hour_utilization"
     if is_future_epoch "$five_hour_reset_iso"; then
         five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "%H:%M" "1")
         [ -n "$five_hour_reset" ] && show_five_hour_reset=1
     fi
 
-    seven_day_pct=$(LC_NUMERIC=C awk -v value="${seven_day_utilization:-0}" 'BEGIN {printf "%.0f", value + 0}')
+    round_to_int seven_day_pct "$seven_day_utilization"
     if is_future_epoch "$seven_day_reset_iso"; then
         seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "$seven_day_time_format" "0")
         seven_day_date=$(format_reset_time "$seven_day_reset_iso" "$short_seven_day_date_format" "0")
@@ -910,8 +952,16 @@ EOF
     fi
 
     if [ "$extra_enabled" = "true" ]; then
-        extra_used=$(LC_NUMERIC=C awk -v value="${extra_used_cents:-0}" 'BEGIN {printf "%.2f", value / 100}')
-        extra_limit=$(LC_NUMERIC=C awk -v value="${extra_limit_cents:-0}" 'BEGIN {printf "%.2f", value / 100}')
+        if [[ "$extra_used_cents" =~ ^[0-9]+$ ]]; then
+            printf -v extra_used "%d.%02d" $(( extra_used_cents / 100 )) $(( extra_used_cents % 100 ))
+        else
+            extra_used="0.00"
+        fi
+        if [[ "$extra_limit_cents" =~ ^[0-9]+$ ]]; then
+            printf -v extra_limit "%d.%02d" $(( extra_limit_cents / 100 )) $(( extra_limit_cents % 100 ))
+        else
+            extra_limit="0.00"
+        fi
         show_extra=1
     fi
 fi

@@ -955,6 +955,7 @@ build_usage_bar_line() {
     local filled_width=0
     if [ "$pct_value" -gt 0 ]; then
         filled_width=$(( pct_value * bar_width / 100 ))
+        [ "$filled_width" -lt 1 ] && filled_width=1
     fi
     if [ "$filled_width" -gt "$bar_width" ]; then
         filled_width="$bar_width"
