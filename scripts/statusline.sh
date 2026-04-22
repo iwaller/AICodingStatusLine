@@ -942,6 +942,8 @@ EOF
     if is_future_epoch "$five_hour_reset_iso"; then
         five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "%H:%M" "1")
         [ -n "$five_hour_reset" ] && show_five_hour_reset=1
+    else
+        five_hour_pct=0
     fi
 
     round_to_int seven_day_pct "$seven_day_utilization"

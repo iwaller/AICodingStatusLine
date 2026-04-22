@@ -737,6 +737,8 @@ if ($usageData) {
             if (Test-FutureTime $usage.five_hour.resets_at) {
                 $fiveHourReset = Format-ResetTime $usage.five_hour.resets_at "HH:mm" $true
                 $showFiveHourReset = [bool]$fiveHourReset
+            } else {
+                $fiveHourPct = 0
             }
 
             $sevenDayPct = [math]::Floor([double]$usage.seven_day.utilization)

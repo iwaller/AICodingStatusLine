@@ -836,8 +836,8 @@ class StatusLineTests(unittest.TestCase):
             "extra_usage": {"is_enabled": False},
         }
         output = self._run_shell(budget=145, usage=past_usage)
-        self.assertIn("5h 83%", output)
-        self.assertNotRegex(output, r"5h 83% \d")
+        self.assertIn("5h 0%", output)
+        self.assertNotRegex(output, r"5h 0% \d")
         self.assertIn("7d 63%", output)
         self.assertNotRegex(output, r"7d 63% \d")
 
@@ -854,7 +854,7 @@ class StatusLineTests(unittest.TestCase):
         )
         lines = output.splitlines()
         self.assertEqual(3, len(lines))
-        self.assertRegex(lines[1], r"^5h [=\-]+\s+83%$")
+        self.assertRegex(lines[1], r"^5h [=\-]+\s+0%$")
         self.assertRegex(lines[2], r"^7d [=\-]+\s+63%$")
 
     def test_install_script_codex_target_installs_tmux_assets(self):
