@@ -595,7 +595,7 @@ build_usage_bar_line() {
         filled_text="${secondary}${filled_plain}${reset}"
     else
         pct_color=$(usage_color "$pct_value")
-        time_color="$secondary"
+        time_color="$white"
         filled_text="${pct_color}${filled_plain}${reset}"
     fi
 
