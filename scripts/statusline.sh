@@ -600,7 +600,7 @@ build_usage_bar_line() {
     fi
 
     LINE_PLAIN="${label} ${filled_plain}${empty_plain} ${pct_padded}"
-    LINE_TEXT="${dim}${label}${reset} ${filled_text}${secondary}${empty_plain}${reset} ${pct_color}${pct_padded}${reset}"
+    LINE_TEXT="${white}${label}${reset} ${filled_text}${secondary}${empty_plain}${reset} ${pct_color}${pct_padded}${reset}"
 
     if [ -n "$time_text" ]; then
         LINE_PLAIN+=" ${time_text}"
