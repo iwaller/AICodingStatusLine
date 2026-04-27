@@ -10,7 +10,7 @@
     {
       "name": "aicoding-statusline",
       "description": "Claude Code & Codex CLI 状态栏 — 主题、布局、进度条、用量显示",
-      "version": "2.2.1",
+      "version": "2.2.2",
       "source": {
         "source": "url",
         "url": "https://github.com/iwaller/AICodingStatusLine.git"
