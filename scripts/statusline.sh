@@ -861,14 +861,16 @@ fi
 
 if [ "$need_usage" -eq 1 ]; then
     cache_file="/tmp/claude/statusline-usage-cache.json"
+    lock_file="/tmp/claude/statusline-usage-cache.lock"
     cache_max_age=60
+    lock_max_age=15
     mkdir -p /tmp/claude
 
     needs_refresh=true
+    now=$(date +%s)
 
     if [ -f "$cache_file" ]; then
         cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
-        now=$(date +%s)
         cache_age=$(( now - cache_mtime ))
         if [ "$cache_age" -lt "$cache_max_age" ]; then
             needs_refresh=false
@@ -876,8 +878,17 @@ if [ "$need_usage" -eq 1 ]; then
         usage_data=$(cat "$cache_file" 2>/dev/null)
     fi
 
+    # If cache is stale, check if another process already holds the lock
+    if $needs_refresh && [ -f "$lock_file" ]; then
+        lock_mtime=$(stat -c %Y "$lock_file" 2>/dev/null || stat -f %m "$lock_file" 2>/dev/null)
+        lock_age=$(( now - lock_mtime ))
+        if [ "$lock_age" -lt "$lock_max_age" ]; then
+            needs_refresh=false
+        fi
+    fi
+
     if $needs_refresh; then
-        touch "$cache_file" 2>/dev/null
+        touch "$lock_file" 2>/dev/null
         token=$(get_oauth_token)
         if [ -n "$token" ] && [ "$token" != "null" ]; then
             response=$(curl -s --max-time 10 \
