@@ -448,7 +448,7 @@ build_ctx_segment() {
     local pct_color
     pct_color=$(usage_color "$pct_used")
     SEG_PLAIN="ctx ${used_tokens}/${total_tokens} ${pct_used}%"
-    SEG_TEXT="${dim}ctx${reset} ${white}${used_tokens}/${total_tokens}${reset} ${white}${pct_used}%${reset}"
+    SEG_TEXT="${dim}ctx${reset} ${primary}${used_tokens}/${total_tokens}${reset} ${pct_color}${pct_used}%${reset}"
 }
 
 build_eff_segment() {
@@ -484,10 +484,10 @@ build_five_hour_segment() {
     disp_pct=$(display_pct "$five_hour_pct")
     suffix=$(pct_suffix)
     SEG_PLAIN="5h ${disp_pct}%${suffix}"
-    SEG_TEXT="${dim}5h${reset} ${white}${disp_pct}%${suffix}${reset}"
+    SEG_TEXT="${dim}5h${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_five_hour_reset" -eq 1 ] && [ -n "$five_hour_reset" ]; then
         SEG_PLAIN+=" ${five_hour_reset}"
-        SEG_TEXT+=" ${white}${five_hour_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${five_hour_reset}${reset}"
     fi
 }
 
@@ -503,10 +503,10 @@ build_seven_day_segment() {
     disp_pct=$(display_pct "$seven_day_pct")
     suffix=$(pct_suffix)
     SEG_PLAIN="7d ${disp_pct}%${suffix}"
-    SEG_TEXT="${dim}7d${reset} ${white}${disp_pct}%${suffix}${reset}"
+    SEG_TEXT="${dim}7d${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_seven_day_reset" -eq 1 ] && [ -n "$seven_day_reset" ]; then
         SEG_PLAIN+=" ${seven_day_reset}"
-        SEG_TEXT+=" ${white}${seven_day_reset}${reset}"
+        SEG_TEXT+=" ${secondary}${seven_day_reset}${reset}"
     fi
 }
 
