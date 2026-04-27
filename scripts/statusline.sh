@@ -435,7 +435,7 @@ build_git_segment() {
     SEG_PLAIN="$base_plain"
     SEG_TEXT="${teal}${display_dir}${reset}"
     if [ -n "$git_branch" ]; then
-        SEG_TEXT+="${dim}@${reset}${branch}${git_branch}${reset}"
+        SEG_TEXT+="${dim}@${reset}${green}${git_branch}${reset}"
     fi
     if [ "$show_git_diff" -eq 1 ] && [ -n "$git_stat" ]; then
         local added_part="${git_stat%% *}"
