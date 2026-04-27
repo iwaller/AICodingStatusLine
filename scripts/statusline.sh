@@ -475,7 +475,7 @@ build_eff_segment() {
 build_five_hour_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="5h -"
-        SEG_TEXT="${dim}5h${reset} ${secondary}-${reset}"
+        SEG_TEXT="${white}5h${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -484,7 +484,7 @@ build_five_hour_segment() {
     disp_pct=$(display_pct "$five_hour_pct")
     suffix=$(pct_suffix)
     SEG_PLAIN="5h ${disp_pct}%${suffix}"
-    SEG_TEXT="${dim}5h${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
+    SEG_TEXT="${white}5h${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_five_hour_reset" -eq 1 ] && [ -n "$five_hour_reset" ]; then
         SEG_PLAIN+=" ${five_hour_reset}"
         SEG_TEXT+=" ${secondary}${five_hour_reset}${reset}"
@@ -494,7 +494,7 @@ build_five_hour_segment() {
 build_seven_day_segment() {
     if [ "$usage_available" -ne 1 ]; then
         SEG_PLAIN="7d -"
-        SEG_TEXT="${dim}7d${reset} ${secondary}-${reset}"
+        SEG_TEXT="${white}7d${reset} ${secondary}-${reset}"
         return
     fi
 
@@ -503,7 +503,7 @@ build_seven_day_segment() {
     disp_pct=$(display_pct "$seven_day_pct")
     suffix=$(pct_suffix)
     SEG_PLAIN="7d ${disp_pct}%${suffix}"
-    SEG_TEXT="${dim}7d${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
+    SEG_TEXT="${white}7d${reset} ${pct_color}${disp_pct}%${suffix}${reset}"
     if [ "$show_seven_day_reset" -eq 1 ] && [ -n "$seven_day_reset" ]; then
         SEG_PLAIN+=" ${seven_day_reset}"
         SEG_TEXT+=" ${secondary}${seven_day_reset}${reset}"
